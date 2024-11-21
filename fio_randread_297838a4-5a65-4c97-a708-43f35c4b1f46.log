@@ -1,0 +1,28 @@
+throughput-test-job: (g=0): rw=randread, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=rados, iodepth=8
+fio-3.38-7-ga1916-dirty
+Starting 1 process
+
+throughput-test-job: (groupid=0, jobs=1): err= 0: pid=604970: Fri Nov 29 12:57:49 2024
+  read: IOPS=14.2k, BW=55.5MiB/s (58.2MB/s)(3328MiB/60001msec)
+    slat (usec): min=11, max=257, avg=23.51, stdev= 8.17
+    clat (usec): min=244, max=13582, avg=536.73, stdev=195.76
+     lat (usec): min=267, max=13640, avg=560.24, stdev=195.57
+    clat percentiles (usec):
+     |  1.00th=[  285],  5.00th=[  306], 10.00th=[  326], 20.00th=[  371],
+     | 30.00th=[  416], 40.00th=[  461], 50.00th=[  506], 60.00th=[  553],
+     | 70.00th=[  611], 80.00th=[  676], 90.00th=[  783], 95.00th=[  881],
+     | 99.00th=[ 1057], 99.50th=[ 1090], 99.90th=[ 1270], 99.95th=[ 1827],
+     | 99.99th=[ 5145]
+   bw (  KiB/s): min=53320, max=58072, per=100.00%, avg=56789.53, stdev=917.30, samples=120
+   iops        : min=13330, max=14518, avg=14197.38, stdev=229.33, samples=120
+  lat (usec)   : 250=0.01%, 500=48.81%, 750=38.82%, 1000=10.49%
+  lat (msec)   : 2=1.83%, 4=0.03%, 10=0.02%, 20=0.01%
+  cpu          : usr=33.53%, sys=4.55%, ctx=741053, majf=0, minf=3
+  IO depths    : 1=0.1%, 2=0.1%, 4=9.4%, 8=90.6%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.1%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=851843,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=8
+
+Run status group 0 (all jobs):
+   READ: bw=55.5MiB/s (58.2MB/s), 55.5MiB/s-55.5MiB/s (58.2MB/s-58.2MB/s), io=3328MiB (3489MB), run=60001-60001msec

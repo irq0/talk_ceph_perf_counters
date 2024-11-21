@@ -1,11 +1,5 @@
 ---
 repos:
-  - repo: https://github.com/jumanjihouse/pre-commit-hooks
-    rev: 3.0.0
-    hooks:
-      - id: forbid-binary
-      - id: git-check
-
   - repo: https://github.com/codespell-project/codespell
     rev: v2.2.6
     hooks:
@@ -24,7 +18,8 @@ repos:
         - --unique
       exclude: >-
         (?x)^(
-          .dicts/.*
+          \.dicts/.*|
+          .*\.json
           )$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -52,8 +47,11 @@ repos:
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
     rev: 3.0.0
     hooks:
-      - id: forbid-binary
       - id: git-check
+        exclude: >-
+          (?x)^(
+          .*\.log
+          )$
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.3.0

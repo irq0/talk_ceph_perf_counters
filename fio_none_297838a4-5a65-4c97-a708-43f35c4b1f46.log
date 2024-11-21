@@ -1,0 +1,12 @@
+fio: failed parsing rw=none
+        valid values: read       Sequential read
+                    : write      Sequential write
+                    : trim       Sequential trim
+                    : randread   Random read
+                    : randwrite  Random write
+                    : randtrim   Random trim
+                    : rw         Sequential read and write mix
+                    : readwrite  Sequential read and write mix
+                    : randrw     Random read and write mix
+                    : trimwrite  Trim and write mix, trims preceding writes
+                    : randtrimwrite Randomly trim and write mix, trims preceding writes

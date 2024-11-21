@@ -1,0 +1,27 @@
+throughput-test-job: (g=0): rw=randwrite, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=rados, iodepth=8
+fio-3.38-7-ga1916-dirty
+Starting 1 process
+
+throughput-test-job: (groupid=0, jobs=1): err= 0: pid=603955: Fri Nov 29 12:55:43 2024
+  write: IOPS=220, BW=880KiB/s (902kB/s)(51.6MiB/60026msec); 0 zone resets
+    slat (usec): min=14, max=184, avg=38.32, stdev=12.21
+    clat (msec): min=15, max=119, avg=36.30, stdev=11.64
+     lat (msec): min=15, max=119, avg=36.34, stdev=11.64
+    clat percentiles (msec):
+     |  1.00th=[   20],  5.00th=[   22], 10.00th=[   23], 20.00th=[   25],
+     | 30.00th=[   28], 40.00th=[   32], 50.00th=[   36], 60.00th=[   39],
+     | 70.00th=[   43], 80.00th=[   46], 90.00th=[   53], 95.00th=[   57],
+     | 99.00th=[   67], 99.50th=[   73], 99.90th=[   93], 99.95th=[  103],
+     | 99.99th=[  120]
+   bw (  KiB/s): min=  512, max= 1376, per=99.95%, avg=880.27, stdev=247.31, samples=120
+   iops        : min=  128, max=  344, avg=220.07, stdev=61.83, samples=120
+  lat (msec)   : 20=1.87%, 50=84.05%, 100=14.02%, 250=0.06%
+  cpu          : usr=0.86%, sys=0.10%, ctx=12523, majf=0, minf=46
+  IO depths    : 1=0.1%, 2=0.1%, 4=3.5%, 8=96.4%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.1%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,13212,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=8
+
+Run status group 0 (all jobs):
+  WRITE: bw=880KiB/s (902kB/s), 880KiB/s-880KiB/s (902kB/s-902kB/s), io=51.6MiB (54.1MB), run=60026-60026msec
