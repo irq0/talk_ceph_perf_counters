@@ -1,0 +1,659 @@
+#+TITLE: Understanding Ceph One Performance Counter at a Time
+#+AUTHOR: Marcel Lauhoff
+#+OPTIONS: H:4 toc:2 num:nil
+#+PROPERTY: header-args :var source="/compile2/ceph/wip"
+#+PROPERTY: header-args+ :var build="/compile2/ceph/wip/build"
+#+PROPERTY: header-args+ :var out="/compile2/ceph/wip/build/out"
+#+PROPERTY: header-args+ :var asok="/compile2/ceph/wip/build/asok"
+* Introduction
+
+* Setup
+Basic "vstart" cluster
+#+begin_src bash
+MON=3 OSD=3 MGR=1 RGW=1 MDS=2 NFS=0 ../src/vstart.sh -n
+#+end_src
+
+
+Convenience importable snippets. Re-evaluate when restarting the cluster.
+#+name: env
+#+begin_src bash
+source  $build/vstart_environment.sh
+
+function testfile_4mb () {
+    local filename="/tmp/random_4mb"
+    if ! [[ -r $filename ]]; then
+	dd if=/dev/urandom of="$filename" bs=4M count=1
+    fi
+    echo "$filename"
+}
+
+mons () {
+    ceph -f json mon dump 2>/dev/null | jq -r '"mon.\(.mons[].name)"'
+}
+osds () {
+    ceph -f json osd dump 2>/dev/null | jq -r '"osd.\(.osds[].osd)"'
+}
+mgrs () {
+    ceph -f json mgr dump 2>/dev/null | jq -r '"mgr.\(.active_name)"'
+}
+
+ceph_daemons () {
+    mons
+    osds
+    mgrs
+}
+
+reset_rgw_perf_counters () {
+    ceph daemon $out/radosgw.8000.asok perf reset all
+}
+
+reset_daemon_perf_counters ()  {
+    ceph_daemons | xargs -I{} ceph tell '{}' perf reset all &>/dev/null
+}
+#+end_src
+
+#+RESULTS: env
+
+#+begin_src bash :noweb yes :results code replace
+<<env>>
+creds=($(radosgw-admin user info --uid testid 2>/dev/null | jq -r '.keys[0] | [.access_key, .secret_key] | @tsv'))
+access_key="${creds[0]}"
+secret_key="${creds[1]}"
+
+cat <<EOF
+access_key="$access_key"
+secret_key="$secret_key"
+
+function s3 () {
+   s3cmd --access_key "$access_key" \
+	  --secret_key "$secret_key" \
+	  --signature-v2 \
+	  --host=http://localhost:8000 \
+	  --no-ssl \
+	  --host-bucket="http://localhost:8000/%(bucket)" \
+	  \$@ 2>/dev/null
+}
+EOF
+#+end_src
+
+#+name: env_s3
+#+RESULTS:
+#+begin_src bash
+access_key="0555b35654ad1656d804"
+secret_key="h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="
+
+function s3 () {
+   s3cmd --access_key "0555b35654ad1656d804" 	  --secret_key "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==" 	  --signature-v2 	  --host=http://localhost:8000 	  --no-ssl 	  --host-bucket="http://localhost:8000/%(bucket)" 	  $@ 2>/dev/null
+}
+#+end_src
+
+Create S3 test bucket
+#+begin_src bash :noweb yes
+<<env_s3>>
+s3 mb s3://testbucket
+#+end_src
+
+#+RESULTS:
+: Bucket 's3://testbucket/' created
+
+Create pool for =fio=
+#+begin_src bash :noweb yes
+<<env>>
+ceph osd pool create rbd
+#+end_src
+
+#+RESULTS:
+
+#+begin_src bash :noweb yes
+<<env>>
+
+#+end_src
+
+
+* Accessing Admin Sockets
+Use either =ceph tell <target>= or =ceph daemon <asok>=
+
+#+begin_src bash :noweb yes :results output raw
+<<env>>
+ceph tell osd.0 version 2>/dev/null
+ceph daemon $asok/osd.0.asok version 2>/dev/null
+#+end_src
+
+#+RESULTS:
+{
+    "version": "Development",
+    "release": "squid",
+    "release_type": "dev"
+}
+{
+    "version": "Development",
+    "release": "squid",
+    "release_type": "dev"
+}
+
+* RGW: Startup
+Let's see if there were S3 operations already (there should not):
+#+begin_src bash :noweb yes :results output
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump rgw | jq '.rgw | with_entries(select(.key | test(".*(req|qlen).*")))'
+ceph daemon $out/radosgw.8000.asok perf dump rgw_op | jq '.rgw_op | with_entries(select(.key | test(".*(put|get).*(ops|bytes).*")))'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+{
+  "req": 0,
+  "failed_req": 0,
+  "qlen": 0
+}
+{
+  "put_obj_ops": 0,
+  "put_obj_bytes": 0,
+  "get_obj_ops": 0,
+  "get_obj_bytes": 0
+}
+#+end_example
+
+Let's list all RADOS operations the objecter counted since start:
+#+begin_src bash :noweb yes :results output
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | jq '.[] | with_entries(select((.key | test("^(osdop_|omap_)")) and (.value > 0) )) | select(length > 0)'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+{
+  "osdop_read": 5,
+  "osdop_call": 2
+}
+{
+  "osdop_create": 41,
+  "osdop_read": 13,
+  "osdop_call": 731,
+  "osdop_watch": 30,
+  "osdop_other": 128
+}
+#+end_example
+
+RGW actually runs multiple objecters as it uses multiple RADOS io contexts.
+
+What we readily see is that RGW relies heavily on RADOS calls to OSD object classes.
+
+That is a lot of operations. But beware: Operation does not mean individual RPC / RADOS calls / messages.
+We can further drill down by asking the messenger.
+
+Looking at the =perf dump= we actually see 3 messenger entries. One for each worker. A worker is it's own event loop. The messenger distributes connections between them.
+
+#+begin_src bash :noweb yes :results output
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | \
+    jq '(.["AsyncMessenger::Worker-0"] + .["AsyncMessenger::Worker-1"] + .["AsyncMessenger::Worker-2"]) |
+            with_entries(select(.key | test(".*_(messages|bytes)$")))'
+#+end_src
+
+#+RESULTS:
+: {
+:   "msgr_recv_messages": 691,
+:   "msgr_send_messages": 856,
+:   "msgr_recv_bytes": 176986,
+:   "msgr_send_bytes": 239861,
+:   "msgr_recv_encrypted_bytes": 6432,
+:   "msgr_send_encrypted_bytes": 2320
+: }
+
+Note: We sum a couple of values before we filter that we aren't supposed to sum.
+
+#+RESULTS:
+: {
+:   "msgr_recv_messages": 631,
+:   "msgr_send_messages": 776,
+:   "msgr_recv_bytes": 162466,
+:   "msgr_send_bytes": 219481,
+:   "msgr_recv_encrypted_bytes": 6432,
+:   "msgr_send_encrypted_bytes": 2320
+: }
+
+Is the work distributed equally between the workers?
+
+#+begin_src bash :noweb yes :results output
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | \
+    jq '(.["AsyncMessenger::Worker-0"], .["AsyncMessenger::Worker-1"], .["AsyncMessenger::Worker-2"]) |
+            with_entries(select(.key | test(".*_(messages|bytes)$")))'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+{
+  "msgr_recv_messages": 542,
+  "msgr_send_messages": 889,
+  "msgr_recv_bytes": 137591,
+  "msgr_send_bytes": 328974,
+  "msgr_recv_encrypted_bytes": 0,
+  "msgr_send_encrypted_bytes": 134384
+}
+{
+  "msgr_recv_messages": 996,
+  "msgr_send_messages": 1168,
+  "msgr_recv_bytes": 251806,
+  "msgr_send_bytes": 339230,
+  "msgr_recv_encrypted_bytes": 0,
+  "msgr_send_encrypted_bytes": 0
+}
+{
+  "msgr_recv_messages": 712,
+  "msgr_send_messages": 884,
+  "msgr_recv_bytes": 182068,
+  "msgr_send_bytes": 246994,
+  "msgr_recv_encrypted_bytes": 6432,
+  "msgr_send_encrypted_bytes": 2320
+}
+#+end_example
+
+** Extra: Get a full list of operations
+.. not just the > 0
+#+begin_src bash
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump \
+    | jq 'with_entries(select(.key | test("^objecter.*")))' \
+    | jq '[.[] | with_entries(select(.key | test("^(osdop_|omap_)")))]'
+#+end_src
+
+#+RESULTS:
+
+
+#+begin_example
+  {
+    "osdop_stat": 0,
+    "osdop_create": 41,
+    "osdop_read": 13,
+    "osdop_write": 0,
+    "osdop_writefull": 0,
+    "osdop_writesame": 0,
+    "osdop_append": 0,
+    "osdop_zero": 0,
+    "osdop_truncate": 0,
+    "osdop_delete": 0,
+    "osdop_mapext": 0,
+    "osdop_sparse_read": 0,
+    "osdop_clonerange": 0,
+    "osdop_getxattr": 0,
+    "osdop_setxattr": 0,
+    "osdop_cmpxattr": 0,
+    "osdop_rmxattr": 0,
+    "osdop_resetxattrs": 0,
+    "osdop_call": 731,
+    "osdop_watch": 40,
+    "osdop_notify": 0,
+    "osdop_src_cmpxattr": 0,
+    "osdop_pgls": 0,
+    "osdop_pgls_filter": 0,
+    "osdop_other": 128
+  }
+  {
+    "osdop_stat": 0,
+    "osdop_create": 41,
+    "osdop_read": 13,
+    "osdop_write": 0,
+    "osdop_writefull": 0,
+    "osdop_writesame": 0,
+    "osdop_append": 0,
+    "osdop_zero": 0,
+    "osdop_truncate": 0,
+    "osdop_delete": 0,
+    "osdop_mapext": 0,
+    "osdop_sparse_read": 0,
+    "osdop_clonerange": 0,
+    "osdop_getxattr": 0,
+    "osdop_setxattr": 0,
+    "osdop_cmpxattr": 0,
+    "osdop_rmxattr": 0,
+    "osdop_resetxattrs": 0,
+    "osdop_call": 731,
+    "osdop_watch": 1160,
+    "osdop_notify": 0,
+    "osdop_src_cmpxattr": 0,
+    "osdop_pgls": 0,
+    "osdop_pgls_filter": 0,
+    "osdop_other": 128
+  }
+
+
+#+end_example
+
+
+* Examples for Gauges
+#+RESULTS:
+#+begin_example
+{
+  "numpg": 369,
+  "numpg_primary": 136,
+  "numpg_replica": 233,
+  "numpg_stray": 0,
+  "numpg_removing": 0,
+  "stat_bytes": 108447916032,
+  "stat_bytes_used": 1096265728,
+  "stat_bytes_avail": 107351650304,
+}
+#+end_example
+
+
+* Example 1: S3 PUT
+** RGW: Set up bucket; Reset metrics
+Let's create a fresh bucket and reset metrics
+
+#+caption: Create bucket and reset performance counters
+#+begin_src bash :noweb yes :results output example
+<<env>>
+<<env_s3>>
+s3 mb s3://testbucket
+reset_rgw_perf_counters
+reset_daemon_perf_counters
+#+end_src
+
+#+RESULTS:
+: Bucket 's3://testbucket/' created
+: {
+:     "success": "perf reset all"
+: }
+
+Now we check for no zero ops counters.
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | jq '.[] | with_entries(select((.key | test("^(osdop|omap)_")) and (.value > 0) )) | select(length > 0)'
+#+end_src
+
+#+RESULTS:
+
+We find that there only have been a couple of watches created.
+
+** RGW: Do the S3 Put; Collect Perf Counters
+Let's put something:
+
+#+caption: (1) S3 PUT operation (2) Get non-zero RADOS operation counter
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+<<env_s3>>
+s3 put $(testfile_4mb) s3://testbucket/$RANDOM | tr -d "\r"
+sleep 1
+ceph daemon $out/radosgw.8000.asok perf dump | jq '.[] | with_entries(select((.key | test("^(osdop|omap)_")) and (.value > 0) )) | select(length > 0)'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+upload: '/tmp/random_4mb' -> 's3://testbucket/15406'  [1 of 1]
+   65536 of 4194304     1% in    0s    15.53 MB/s 4194304 of 4194304   100% in    0s    54.76 MB/s  done
+{
+  "osdop_stat": 2,
+  "osdop_create": 1,
+  "osdop_read": 1,
+  "osdop_writefull": 1,
+  "osdop_setxattr": 9,
+  "osdop_call": 6
+}
+#+end_example
+
+#+caption: Get the operation counter
+#+name: get_num_op_s3_put
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | jq '[.[] | .op] | add'
+#+end_src
+
+#+RESULTS: get_num_op_s3_put
+: 4
+
+The =op= counter is not the same as the sum of the =osdop= counters
+
+#+caption: Sum all osd operations
+#+name: get_num_osdop_s3_put
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | jq '[.[] | with_entries(select(.key | test ("^(osdop|omap)_"))) | .[] ] | add'
+#+end_src
+
+#+RESULTS: get_num_osdop_s3_put
+: 20
+
+#+begin_src bash :noweb yes :results output example
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | \
+    jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger::Worker-2")
+             | to_entries[]
+	       | select(.key | test("_(messages|bytes)$")))
+        as {$key, $value} ({}; .[$key] += $value)'
+#+end_src
+
+#+RESULTS:
+: {
+:   "msgr_recv_messages": 4,
+:   "msgr_send_messages": 4,
+:   "msgr_recv_bytes": 1991,
+:   "msgr_send_bytes": 4198017,
+:   "msgr_recv_encrypted_bytes": 0,
+:   "msgr_send_encrypted_bytes": 0
+: }
+
+#+name: get_num_send_messages
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+ceph daemon $out/radosgw.8000.asok perf dump | \
+    jq '[."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger::Worker-2"] | map(.msgr_send_messages) | add'
+#+end_src
+
+#+RESULTS: get_num_send_messages
+: 4
+
+#+name: get_sent_overhead
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+sent=$(ceph daemon $out/radosgw.8000.asok perf dump | \
+	   jq '[."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger::Worker-2"] | map(.msgr_send_bytes) | add')
+sz_4mb=$((4*1024*1024))
+overhead=$(($sent - $sz_4mb))
+echo $overhead
+#+end_src
+
+#+RESULTS: get_sent_overhead
+: 4497
+
+** Analysis so far
+
+Interesting! We have call_get_num_osdop_s3_put() {{{results(=20=)}}} OSD Ops vs. call_get_num_send_messages() {{{results(=5=)}}} messengers going out vs. call_get_num_op_s3_put() {{{results(=4=)}}}.
+
+We can also measure the overhead in bytes: call_get_sent_overhead() {{{results(=4497=)}}}.
+
+What we learn:
+Not every OSD Ops is a message. Indeed RADOS allows combinations of Ops into a single message. For example to build conditional writes or atomic transactions.
+
+** Bonus: Messenger Connections
+Where is my RadosGW connected to?
+/requires patches not yet in upstream/
+
+#+begin_src bash :noweb yes :results output
+<<env>>
+for msgr in $(ceph daemon $out/radosgw.8000.asok messenger dump \
+		  | jq -r '.messengers | @tsv'); do
+    ceph daemon $out/radosgw.8000.asok messenger dump $msgr
+done \
+    | jq -r '.messenger.connections[].async_connection |
+             select(.state == "STATE_CONNECTION_ESTABLISHED") |
+             "\(.target_addr.addr) \t \(.peer.type) \t id:\(.peer.id) gid:\(.peer.global_id)"'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+192.168.101.23:6800 	 mgr 	 id:-1 gid:0
+192.168.101.23:40535 	 mon 	 id:-1 gid:0
+192.168.101.23:6800 	 mgr 	 id:-1 gid:0
+192.168.101.23:6810 	 osd 	 id:-1 gid:0
+192.168.101.23:6818 	 osd 	 id:-1 gid:0
+192.168.101.23:6802 	 osd 	 id:-1 gid:0
+192.168.101.23:40533 	 mon 	 id:-1 gid:0
+192.168.101.23:6802 	 osd 	 id:-1 gid:0
+192.168.101.23:6800 	 mgr 	 id:-1 gid:0
+192.168.101.23:40533 	 mon 	 id:-1 gid:0
+#+end_example
+
+/For some reason the librados messenger doesn't set the peer ids to something sensible/
+
+** OSD: Messenger and Op Processing
+As you all know, Ceph distributes data psycho randomly. Since we can kind of assume that we accessed multiple objects, the osds must have been hit equally.
+
+With one exception: one gets the data. the other only by replication.
+
+Let's look at the messengers
+
+#+begin_src bash :noweb yes :results output example
+<<env>>
+for osd in $(osds); do
+    echo $osd
+    ceph tell $osd perf dump 2>/dev/null | \
+    jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger::Worker-2")
+             | to_entries[]
+	       | select(.key | test("_(messages|bytes)$")))
+        as {$key, $value} ({}; .[$key] += $value)'
+done
+#+end_src
+
+#+RESULTS:
+#+begin_example
+osd.0
+{
+  "msgr_recv_messages": 374,
+  "msgr_send_messages": 375,
+  "msgr_recv_bytes": 4262372,
+  "msgr_send_bytes": 8600690,
+  "msgr_recv_encrypted_bytes": 0,
+  "msgr_send_encrypted_bytes": 100032
+}
+osd.1
+{
+  "msgr_recv_messages": 333,
+  "msgr_send_messages": 334,
+  "msgr_recv_bytes": 4260971,
+  "msgr_send_bytes": 179037,
+  "msgr_recv_encrypted_bytes": 0,
+  "msgr_send_encrypted_bytes": 90176
+}
+osd.2
+{
+  "msgr_recv_messages": 328,
+  "msgr_send_messages": 329,
+  "msgr_recv_bytes": 4260173,
+  "msgr_send_bytes": 170967,
+  "msgr_recv_encrypted_bytes": 0,
+  "msgr_send_encrypted_bytes": 82432
+}
+#+end_example
+
+
+#+begin_src bash :noweb yes :results output example
+<<env>>
+for osd in $(osds); do
+    echo $osd
+    ceph tell $osd perf dump 2>/dev/null | \
+    jq '.osd | with_entries(select(.key | test("^(op|op_(in|out)_bytes|subop|subop_in_bytes)$")))'
+done
+#+end_src
+
+#+RESULTS:
+#+begin_example
+osd.0
+{
+  "op": 9,
+  "op_in_bytes": 4194304,
+  "op_out_bytes": 224,
+  "subop": 0,
+  "subop_in_bytes": 0
+}
+osd.1
+{
+  "op": 2,
+  "op_in_bytes": 0,
+  "op_out_bytes": 0,
+  "subop": 3,
+  "subop_in_bytes": 4198255
+}
+osd.2
+{
+  "op": 3,
+  "op_in_bytes": 0,
+  "op_out_bytes": 0,
+  "subop": 3,
+  "subop_in_bytes": 4198255
+}
+#+end_example
+
+** Bluestore: OMaps
+#+begin_src bash :noweb yes :results output example
+<<env>>
+for osd in $(osds); do
+    ceph tell $osd perf dump 2>/dev/null
+done \
+    | jq '.bluestore | with_entries(select(.key | test("^omap_.*_count$")))'
+#+end_src
+
+#+RESULTS:
+#+begin_example
+{
+  "omap_iterator_count": 0,
+  "omap_rmkeys_count": 0,
+  "omap_rmkey_range_count": 0,
+  "omap_setheader_count": 1,
+  "omap_setkeys_count": 5
+}
+{
+  "omap_iterator_count": 0,
+  "omap_rmkeys_count": 0,
+  "omap_rmkey_range_count": 0,
+  "omap_setheader_count": 1,
+  "omap_setkeys_count": 5
+}
+{
+  "omap_iterator_count": 0,
+  "omap_rmkeys_count": 0,
+  "omap_rmkey_range_count": 0,
+  "omap_setheader_count": 1,
+  "omap_setkeys_count": 5
+}
+#+end_example
+
+Since everything is ok on this cluster and not many operation run we can expect this to be equal.
+
+* COMMENT RADOS Throttling
+
+* Latency Metrics: Exploring where time is spent
+
+
+* Extra: OSD Perf Queries
+Get the top talking clients.
+
+Start manager module. Register query
+#+begin_src bash :noweb yes :results output
+<<env>>
+ceph mgr module enable osd_perf_query || true
+ceph osd perf query add --query=client_id 2>/dev/null
+#+end_src
+
+#+name: perf_query_id
+#+RESULTS:
+: 8
+
+#+begin_src bash :noweb yes :var query_id=perf_query_id :results output
+<<env>>
+ceph osd perf counters get "$query_id" 2>/dev/null
+#+end_src
+
+#+RESULTS:
+: +--------------+-----------+----------+-----------------+----------------+---------------------+--------------------+
+: | CLIENT_ID    |WRITE_OPS  |READ_OPS  |WRITE_BYTES/SEC  |READ_BYTES/SEC  |WRITE_LATENCY(MSEC)  |READ_LATENCY(MSEC)  |
+: +--------------+-----------+----------+-----------------+----------------+---------------------+--------------------+
+: |client.15437  |    9      |   16     |      3.50       |     0.00       |       14.91         |       5.58         |
+: +--------------+-----------+----------+-----------------+----------------+---------------------+--------------------+
+
+
+* COMMENT babel settings
+  Local Variables:
+  org-confirm-babel-evaluate: nil
+  End:
