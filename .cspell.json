@@ -1,0 +1,12 @@
+{
+   "dictionaries" : [
+      "irq0"
+   ],
+   "dictionaryDefinitions" : [
+      {
+         "addWords" : "true",
+         "name" : "irq0",
+         "path" : ".dicts/irq0.dict"
+      }
+   ]
+}
