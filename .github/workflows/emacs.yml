@@ -1,0 +1,46 @@
+name: "Export"
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      pages: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: install emacs
+      uses: purcell/setup-emacs@master
+      with:
+        version: 29.4
+    - name: get org-export tool repo
+      uses: actions/checkout@v4
+      with:
+        repository: nhoffman/org-export
+        path: org-export
+    - name: Prep
+      run: mkdir _site
+    - name: Emacs export
+      run: |
+        ./org-export/org-export html \
+          --infile notebook.org --outfile _site/notebook.html --css-name orgcss --embed-css
+    - name: copy additional files
+      run: |
+        cp *.json *.log *.png *.pdf _site/
+    - name: debug
+      run: find ./
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
