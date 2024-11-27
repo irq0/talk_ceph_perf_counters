@@ -26,3 +26,14 @@ pgls
 radosgw
 rmxattr
 osds
+bluestore
+setkeys
+setheader
+rmkey
+rmkeys
+subop
+replication
+librados
+numpg
+mgrs
+tecosaur
