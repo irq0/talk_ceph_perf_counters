@@ -212,7 +212,7 @@ echo -n "asok/client.admin.$(pgrep -f 'fio --').asok"
 
 #+caption: Generate a pie plot for table <tab>
 #+name: pie_plot
-#+begin_src python :var tab="example" :file "./example_pie.png" :results graphics file value
+#+begin_src python :var tab="example" :file "./example_pie.svg" :results graphics file value
 import matplotlib.pyplot as plt
 if tab == "example":
     labels = ["a", "b"]
@@ -227,7 +227,7 @@ return fig
 #+end_src
 
 #+RESULTS: pie_plot
-[[file:./example_pie.png]]
+[[file:./example_pie.svg]]
 
 ** Benchmark Tools
 
@@ -357,10 +357,10 @@ Now get RADOS operations counted since start:
 | watch  |  9 |
 | other  | 32 |
 
-#+CALL: pie_plot[:file "./rgw_startup_osdops.png"](tab=rgw_startup_osdops)
+#+CALL: pie_plot[:file "./rgw_startup_osdops.svg"](tab=rgw_startup_osdops)
 
 #+RESULTS:
-[[file:./rgw_startup_osdops.png]]
+[[file:./rgw_startup_osdops.svg]]
 
 Note: In the =perf dump= there is more than one =objecter= entry. Each belongs to a separate librados connection.
 They share the same network stack, so =AsyncMessenger= metrics see Messages of all librados / objecter entries.
@@ -532,10 +532,10 @@ tac $out/radosgw.8000.log | grep -E -m1 'beast:.*PUT /testbucket'
 | setxattr  | 9 |
 | call      | 5 |
 
-#+CALL: pie_plot[:file "rgw_put_osdops.png"](tab=rgw_put_osdops)
+#+CALL: pie_plot[:file "./rgw_put_osdops.svg"](tab=rgw_put_osdops)
 
 #+RESULTS:
-[[file:rgw_put_osdops.png]]
+[[file:./rgw_put_osdops.svg]]
 
 #+caption: Get the operation counter
 #+name: get_num_op_s3_put
@@ -1044,10 +1044,10 @@ grep -E "(Operation|Cluster Total|Throughput)" "warp_${run_id}.log"
 | other     | 16417 |
 | omap_rd   |     2 |
 
-#+CALL: pie_plot[:file "rgw_put_osdops.png"](tab=rgw_s3_bench_osdops)
+#+CALL: pie_plot[:file "./rgw_warp_osdops.svg"](tab=rgw_s3_bench_osdops)
 
 #+RESULTS:
-[[file:rgw_put_osdops.png]]
+[[file:./rgw_warp_osdops.svg]]
 
 #+caption: Get messenger counter from RGW
 #+begin_src bash :noweb yes :results output verbatim :var perf=rgw_s3_bench_perf
@@ -1074,7 +1074,7 @@ jq -r 'to_entries | map(select(.key | test("^objecter"))) | .[] | [.key, .value.
 #+end_src
 
 #+RESULTS:
-| objecter           |         0.0 |
+| objecter            |         0.0 |
 | objecter-0x43dbad00 |         0.0 |
 | objecter-0x43dbaf70 | 0.040378228 |
 
@@ -1143,9 +1143,9 @@ paste <(ceph tell osd.0 perf histogram dump osd op_rw_latency_in_bytes_histogram
 #+end_src
 
 #+RESULTS:
-| bucket      | rw in | rw out | read out | write in |
-| <0          |     0 |      0 |        0 |        0 |
-| 0ns…99µs    |     0 |      0 |        0 |        0 |
+| bucket        | rw in | rw out | read out | write in |
+| <0            |     0 |      0 |        0 |        0 |
+| 0ns…99µs      |     0 |      0 |        0 |        0 |
 | 100µs…199µs   |     0 |      0 |       42 |        0 |
 | 200µs…399µs   |     0 |      0 |     2247 |        0 |
 | 400µs…799µs   |     0 |      0 |     1498 |        0 |
@@ -1159,8 +1159,8 @@ paste <(ceph tell osd.0 perf histogram dump osd op_rw_latency_in_bytes_histogram
 | 102ms…204ms   |   667 |    667 |        8 |      812 |
 | 204ms…409ms   |    34 |     34 |        0 |       38 |
 | 409ms…819ms   |     0 |      0 |        0 |        0 |
-| 819ms…1s    |     0 |      0 |        0 |        0 |
-| 1s…3s       |     0 |      0 |        0 |        0 |
+| 819ms…1s      |     0 |      0 |        0 |        0 |
+| 1s…3s         |     0 |      0 |        0 |        0 |
 | 3s…6s         |     0 |      0 |        0 |        0 |
 | 6s…13s        |     0 |      0 |        0 |        0 |
 | 13s…26s       |     0 |      0 |        0 |        0 |

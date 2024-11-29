@@ -34,7 +34,7 @@ jobs:
           --infile notebook.org --outfile _site/notebook.html --css-name orgcss --embed-css
     - name: copy additional files
       run: |
-        cp *.json *.log *.png *.pdf _site/
+        cp *.json *.log *.svg _site/
     - name: debug
       run: find ./
     - name: Setup Pages

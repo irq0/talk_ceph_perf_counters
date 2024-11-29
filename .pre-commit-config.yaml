@@ -19,7 +19,7 @@ repos:
       exclude: >-
         (?x)^(
           \.dicts/.*|
-          .*\.json
+          .*\.(json|png|svg)
           )$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
