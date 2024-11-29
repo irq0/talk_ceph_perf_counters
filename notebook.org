@@ -350,10 +350,10 @@ ceph daemon $out/radosgw.8000.asok perf dump rgw_op | jq '.rgw_op | with_entries
 
 Now get RADOS operations counted since start:
 
-#+name: rgw_startup_osdops
 #+CALL: client_op_table[:results value table](socket="out/radosgw.8000.asok")
 
-#+RESULTS: rgw_startup_osdops
+#+name: rgw_startup_osdops
+#+RESULTS:
 | read   | 17 |
 | call   | 15 |
 | create | 11 |
