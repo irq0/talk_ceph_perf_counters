@@ -1183,8 +1183,13 @@ We see that:
 - fast reads dominate the count
 - rw in and rw out are the same, as they differ only in the bytes dimension
 
-* Misc Examples
-** Gauges
+* Misc
+** Perf Counter Stats
+From running =pcb.py=:
+#+begin_quote
+Found 880 perf counters in 41 groups
+#+end_quote
+** Examples of Gauges
 #+RESULTS:
 #+begin_example
 {
