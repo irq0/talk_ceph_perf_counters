@@ -1,1 +1,9 @@
+This is the companion org-mode notebook for the
+[[https://sched.co/1ktW7][Understanding Ceph One Performance Counter at a Time]]
+session at [[https://events.linuxfoundation.org/cephalocon/][Cephalocon]] 2024.
+
 🚧🚧🚧
+
+* Notebook
+- as [[./notebook.org][org-mode]] file
+- exported to [[https://irq0.github.io/talk_ceph_perf_counters/notebook.html][html]] with figures
