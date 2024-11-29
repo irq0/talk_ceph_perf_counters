@@ -67,3 +67,4 @@ frontends
 elif
 outb
 nanos
+jsonify
