@@ -214,6 +214,7 @@ echo -n "asok/client.admin.$(pgrep -f 'fio --').asok"
 #+name: pie_plot
 #+begin_src python :var tab="example" :file "./example_pie.svg" :results graphics file value
 import matplotlib.pyplot as plt
+plt.style.use('tableau-colorblind10')
 if tab == "example":
     labels = ["a", "b"]
     sizes = [23, 42]
@@ -222,7 +223,9 @@ else:
     sizes = [x[1] for x in tab]
 
 fig, ax = plt.subplots()
+fig.patch.set_alpha(0)
 ax.pie(sizes, labels=labels)
+ax.patch.set_alpha(0)
 return fig
 #+end_src
 
