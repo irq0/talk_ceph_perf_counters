@@ -264,10 +264,10 @@ return fig
 ** Benchmark Tools
 
 #+name: run_fio
-#+begin_src bash :noweb yes :results output file link :var mix="none" nr_files="128" runtime="10m"
+#+begin_src bash :noweb yes :results output file link :var name="none" mix="none" nr_files="128" runtime="10m"
 <<env>>
-log_file="fio_${mix}_${run_id}.log"
-perf_file="fio_${mix}_${run_id}_perf.json"
+log_file="fio_${name}_${mix}_${run_id}.log"
+perf_file="fio_${name}_${mix}_${run_id}_perf.json"
 (
     while true; do
 	data="$(ceph daemon "$asok/client.admin.$(pgrep -f 'fio --direct').asok" \
@@ -829,6 +829,11 @@ At this point most perf counters are more focused on latency than counting opera
 * Experiment: Simple Write Latency
 /Run simple write benchmark. Learn about latency metrics/
 
+** Perf Counters
+- =objecter.op_latency=
+- =AsyncMessenger*.msgr_send_messages_queue_lat=
+- =osd.op_latency.avgtime=
+- =osd.subop_latency.avgtime=
 ** Setup
 The workload is a simple random write workload using =fio=
 - 4k write
@@ -845,11 +850,11 @@ reset_daemon_perf_counters
 #+RESULTS:
 
 #+caption: Run fio, capture librados perf counters
-#+CALL: run_fio(mix="randwrite", nr_files="128", runtime="1m")
+#+CALL: run_fio(name="simple", mix="randwrite", nr_files="128", runtime="1m")
 
 #+name: fio_simple_write
 #+RESULTS:
-[[file:./fio_randwrite_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
+[[file:./fio_simple_randwrite_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
 
 #+caption: Capture OSD perf counters
 #+begin_src bash :noweb yes :results output discard
@@ -876,26 +881,26 @@ jq '[."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger:
 #+begin_example
 objecter
 {
-  "avgcount": 10518,
-  "sum": 473.048238438,
-  "avgtime": 0.044975112
+  "avgcount": 10153,
+  "sum": 474.325235709,
+  "avgtime": 0.046717742
 }
 messenger
 [
   {
-    "avgcount": 4692,
-    "sum": 0.158083965,
-    "avgtime": 0.000033692
+    "avgcount": 3256,
+    "sum": 0.105244073,
+    "avgtime": 0.000032323
   },
   {
-    "avgcount": 2224,
-    "sum": 0.071155041,
-    "avgtime": 0.000031994
+    "avgcount": 3969,
+    "sum": 0.129336836,
+    "avgtime": 0.000032586
   },
   {
-    "avgcount": 3616,
-    "sum": 0.117081709,
-    "avgtime": 0.000032378
+    "avgcount": 2942,
+    "sum": 0.092894762,
+    "avgtime": 0.000031575
   }
 ]
 #+end_example
@@ -905,7 +910,7 @@ Double check our operation mix. It is indeed only writes.
 #+CALL: client_op_table(json_file=fio_simple_write)
 
 #+RESULTS:
-| write | 10526 |
+| write | 10161 |
 
 We don't find may counters about latency on the RADOS client side.
 The most interesting one is =op_latency= that captures Objecter operations.
@@ -930,9 +935,9 @@ done
 
 #+RESULTS:
 | target |  op_latency |
-| osd.0  | 0.038139149 |
-| osd.1  | 0.039153643 |
-| osd.2  | 0.037723465 |
+| osd.0  | 0.042992129 |
+| osd.1  | 0.044089243 |
+| osd.2  | 0.043497355 |
 
 That is almost what we saw on the client.
 Not surprising, since the cluster runs on localhost.
@@ -954,9 +959,9 @@ done
 
 #+RESULTS:
 | target |  op_latency | subop_latency |              op-subop |
-| osd.0  | 0.038139149 |   0.034313587 | 0.0038255619999999976 |
-| osd.1  | 0.039153643 |   0.028683141 |  0.010470502000000003 |
-| osd.2  | 0.037723465 |    0.03120179 |  0.006521674999999998 |
+| osd.0  | 0.042992129 |   0.037055554 | 0.0059365749999999995 |
+| osd.1  | 0.044089243 |   0.037899561 |  0.006189682000000002 |
+| osd.2  | 0.043497355 |   0.038258205 |  0.005239149999999998 |
 
 =op_latency= includes =subop_latency=.
 Subtracting both gives us about 1ms.
