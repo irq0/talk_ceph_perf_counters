@@ -972,24 +972,24 @@ Subtracting both gives us about 1ms.
 Run three distinct workloads. Get the op_latencies.
 
 
-#+CALL: run_fio(mix="randwrite", nr_files="128", runtime="1m")
+#+CALL: run_fio(name="opmix", mix="randwrite", nr_files="128", runtime="1m")
 
 #+name: fio_mix_randwrite
 #+RESULTS:
-[[file:./fio_randwrite_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
+[[file:./fio_opmix_randwrite_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
 
-#+CALL: run_fio(mix="rw", nr_files="128", runtime="1m")
+#+CALL: run_fio(name="opmix", mix="rw", nr_files="128", runtime="1m")
 
 #+name: fio_mix_rw
 #+RESULTS:
-[[file:./fio_rw_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
+[[file:./fio_opmix_rw_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
 
 
-#+CALL: run_fio(mix="randread", nr_files="128", runtime="1m")
+#+CALL: run_fio(name="opmix", mix="randread", nr_files="128", runtime="1m")
 
 #+name: fio_mix_randread
 #+RESULTS:
-[[file:./fio_randread_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
+[[file:./fio_opmix_randread_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
 
 #+begin_src bash :results output table :var randread=fio_mix_randread rw=fio_mix_rw randwrite=fio_mix_randwrite
 paste \
@@ -998,9 +998,9 @@ paste \
 #+end_src
 
 #+RESULTS:
-| randread  | 0.5244270000000001 |
-| rw        | 18.955181000000003 |
-| randwrite |          36.064376 |
+| randread  |   0.52078 |
+| rw        | 29.578085 |
+| randwrite | 46.274006 |
 
 A trivial result, right?
 
