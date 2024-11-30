@@ -33,7 +33,40 @@ source  $build/vstart_environment.sh
 
 #+RESULTS: env
 
-** Accessing Admin Sockets, Ceph Version
+** Cluster Configuration
+#+caption: Create a S3 test bucket
+#+begin_src bash :noweb yes :results output verbatim
+<<env_s3>>
+s3 mb s3://testbucket
+#+end_src
+
+#+RESULTS:
+: Bucket 's3://testbucket/' created
+
+#+caption: Create pool for =fio=
+#+begin_src bash :noweb yes :results output verbatim
+<<env>>
+ceph osd pool create rbd 2>&1
+ceph osd pool application enable rbd benchmarks
+#+end_src
+
+#+RESULTS:
+: 2024-11-30T15:55:27.325+0100 7fb165f8f6c0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2024-11-30T15:55:27.350+0100 7fb165f8f6c0 -1 WARNING: all dangerous and experimental features are enabled.
+: pool 'rbd' already exists
+
+#+caption: Disable RGW background threads
+#+begin_src bash :noweb yes
+<<env>>
+ceph config set global rgw_enable_quota_threads false 2>/dev/null
+ceph config set global rgw_enable_gc_threads false 2>/dev/null
+ceph config set global rgw_enable_lc_threads false 2>/dev/null
+ceph health mute MGR_MODULE_ERROR 2>/dev/null
+#+end_src
+
+#+RESULTS:
+
+** Accessing Admin Sockets, Ceph Version, Cluster Status
 Use either =ceph tell <target>= or =ceph daemon <asok>=
 
 #+begin_src bash :noweb yes :results output verbatim
@@ -41,6 +74,7 @@ Use either =ceph tell <target>= or =ceph daemon <asok>=
 ceph tell osd.0 version 2>/dev/null
 ceph daemon $asok/osd.0.asok version 2>/dev/null
 ( cd $build && git describe)
+ceph -s 2>/dev/null
 #+end_src
 
 #+RESULTS:
@@ -56,6 +90,25 @@ ceph daemon $asok/osd.0.asok version 2>/dev/null
     "release_type": "dev"
 }
 v19.3.0-6205-ga98f95a35c4
+  cluster:
+    id:     064ec0b9-d86f-4b3e-b28d-33fc22cb7c85
+    health: HEALTH_OK
+            (muted: MGR_MODULE_ERROR)
+
+  services:
+    mon: 3 daemons, quorum a,b,c (age 10m)
+    mgr: x(active, since 4m)
+    mds: 1/1 daemons up, 1 standby
+    osd: 3 osds: 3 up (since 10m), 3 in (since 10m)
+    rgw: 1 daemon active (1 hosts, 1 zones)
+
+  data:
+    volumes: 1/1 healthy
+    pools:   9 pools, 337 pgs
+    objects: 266 objects, 14 KiB
+    usage:   3.0 GiB used, 300 GiB / 303 GiB avail
+    pgs:     337 active+clean
+
 #+end_example
 
 In this notebook we use =ceph tell= for all daemons and =ceph daemon= for clients such as =fio= or =radosgw=
@@ -146,31 +199,7 @@ function s3 () {
 }
 #+end_src
 
-** Cluster Configuration
-#+caption: Create a S3 test bucket
-#+begin_src bash :noweb yes :results output verbatim
-<<env_s3>>
-s3 mb s3://testbucket
-#+end_src
-
-#+RESULTS:
-: Bucket 's3://testbucket/' created
-
-#+caption: Create pool for =fio=
-#+begin_src bash :noweb yes :results output verbatim
-<<env>>
-ceph osd pool create rbd
-#+end_src
-
-#+RESULTS:
-
-#+caption: Disable RGW background threads
-#+begin_src bash :noweb yes
-<<env>>
-ceph config set global rgw_enable_quota_threads false 2>/dev/null
-ceph config set global rgw_enable_gc_threads false 2>/dev/null
-ceph config set global rgw_enable_lc_threads false 2>/dev/null
-#+end_src
+#+RESULTS: env_s3
 
 ** Data Gathering and Plotting
 #+caption: Utility: Generate table of OSD Ops observed on all objecters at asok
