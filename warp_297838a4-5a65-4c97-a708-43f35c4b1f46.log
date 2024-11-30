@@ -8,79 +8,71 @@ Clearing Prefix "warp-benchmark-bucket/"...[2K
 Uploading 128 objects of Random data; 10485760 bytes totalwarp: Starting benchmark in 3s...
 warp: Benchmark starting...
 warp: Saving benchmark data...
-warp: Benchmark data written to "warp-mixed-2024-11-29[115844]-eYRC.csv.zst"
+warp: Benchmark data written to "warp-mixed-2024-11-30[155303]-C1rB.csv.zst"
 
 Mixed operations.
 Operation: DELETE, 10%, Concurrency: 20, Ran 59s.
- * Throughput: 22.00 obj/s
+ * Throughput: 21.97 obj/s
 
 Operation: GET, 45%, Concurrency: 20, Ran 59s.
- * Throughput: 987.67 MiB/s, 98.77 obj/s
+ * Throughput: 981.65 MiB/s, 98.17 obj/s
 
 Operation: PUT, 15%, Concurrency: 20, Ran 59s.
- * Throughput: 328.66 MiB/s, 32.87 obj/s
+ * Throughput: 326.52 MiB/s, 32.65 obj/s
 
 Operation: STAT, 30%, Concurrency: 20, Ran 59s.
- * Throughput: 65.84 obj/s
+ * Throughput: 65.70 obj/s
 
-Cluster Total: 1315.17 MiB/s, 219.25 obj/s over 59s.
+Cluster Total: 1307.39 MiB/s, 218.31 obj/s over 59s.
 warp: Starting cleanup...
 [2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/MYk682j5/"...[2K
+Clearing Prefix "warp-benchmark-bucket/poVop2zq/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/xpN51nCS/"...[2K
+Clearing Prefix "warp-benchmark-bucket/DTBVII(2/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/bYTPR(Nz/"...[2K
+Clearing Prefix "warp-benchmark-bucket/dlvmpsA2/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/3W6JhORh/"...[2K
+Clearing Prefix "warp-benchmark-bucket/uLfNUxjh/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/aDqvQM5k/"...[2K
+Clearing Prefix "warp-benchmark-bucket/EhaBWRW2/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/6YFu4FnU/"...[2K
+Clearing Prefix "warp-benchmark-bucket/UDZqGTxK/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/0KnXw6QI/"...[2K
+Clearing Prefix "warp-benchmark-bucket/RrI8PbeY/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/rZONPI4H/"...[2K
+Clearing Prefix "warp-benchmark-bucket/rtsCg)KJ/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/I(QAFDuP/"...[2K
+Clearing Prefix "warp-benchmark-bucket/8pjo6KOb/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/yWn)9hVI/"...[2K
+Clearing Prefix "warp-benchmark-bucket/yLZMNLdu/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/82bep))y/"...[2K
+Clearing Prefix "warp-benchmark-bucket/iJbr2NJ2/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/g6)8RsYt/"...[2K
+Clearing Prefix "warp-benchmark-bucket/kvg6tLR)/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/2Nwo5SMg/"...[2K
+Clearing Prefix "warp-benchmark-bucket/yNkMafjm/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/938nRIly/"...[2K
+Clearing Prefix "warp-benchmark-bucket/wc38JwxQ/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/cSEywLoa/"...[2K
+Clearing Prefix "warp-benchmark-bucket/q7aJMrBz/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/QXjaCmCU/"...[2K
+Clearing Prefix "warp-benchmark-bucket/w3pH3vD8/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/MAj9Rp9x/"...[2K
+Clearing Prefix "warp-benchmark-bucket/zU8JCbmb/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/K6JG5Eo4/"...[2K
+Clearing Prefix "warp-benchmark-bucket/XfuXSouB/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/5sOZlHro/"...[2K
+Clearing Prefix "warp-benchmark-bucket/DlcEMT7E/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/WDCqvwNu/"...[2K
+Clearing Prefix "warp-benchmark-bucket/aIoBZzjG/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/TAZPET(Q/"...[2K
+Clearing Prefix "warp-benchmark-bucket/Ib2(OuAZ/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/sjfpvBAh/"...[2K
+Clearing Prefix "warp-benchmark-bucket/IowsaUCK/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/SbezT4Mz/"...[2K
+Clearing Prefix "warp-benchmark-bucket/axf1biYl/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/6D4o5gQv/"...[2K
+Clearing Prefix "warp-benchmark-bucket/BO1InKGi/"...[2K
 [Awarp:
-Clearing Prefix "warp-benchmark-bucket/BN6Rvscf/"...[2K
-[Awarp:
-Clearing Prefix "warp-benchmark-bucket/PUKjHMJ3/"...[2K
-[Awarp:
-Clearing Prefix "warp-benchmark-bucket/8DrU3bHY/"...[2K
-[Awarp:
-Clearing Prefix "warp-benchmark-bucket/c)d9)h6H/"...[2K
-[Awarp:
-Clearing Prefix "warp-benchmark-bucket/WeswBmd1/"...warp: Cleanup Done.
+Clearing Prefix "warp-benchmark-bucket/XpFFWXuR/"...warp: Cleanup Done.

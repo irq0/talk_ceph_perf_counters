@@ -1055,29 +1055,43 @@ grep -E "(Operation|Cluster Total|Throughput)" "warp_${run_id}.log"
 
 #+RESULTS:
 : Operation: DELETE, 10%, Concurrency: 20, Ran 59s.
-:  * Throughput: 22.00 obj/s
+:  * Throughput: 21.97 obj/s
 : Operation: GET, 45%, Concurrency: 20, Ran 59s.
-:  * Throughput: 987.67 MiB/s, 98.77 obj/s
+:  * Throughput: 981.65 MiB/s, 98.17 obj/s
 : Operation: PUT, 15%, Concurrency: 20, Ran 59s.
-:  * Throughput: 328.66 MiB/s, 32.87 obj/s
+:  * Throughput: 326.52 MiB/s, 32.65 obj/s
 : Operation: STAT, 30%, Concurrency: 20, Ran 59s.
-:  * Throughput: 65.84 obj/s
-: Cluster Total: 1315.17 MiB/s, 219.25 obj/s over 59s.
+:  * Throughput: 65.70 obj/s
+: Cluster Total: 1307.39 MiB/s, 218.31 obj/s over 59s.
+
+#+caption: collect osd metrics
+#+begin_src bash :var perf=rgw_s3_bench_perf :results output verbatim :noweb yes
+<<env>>
+<<get_daemons>>
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+for osd in $(osds); do
+    ceph tell "$osd" perf dump 2>/dev/null 1> "warp_${run_id}_${osd}_perf.json"
+    ceph tell "$osd" perf histogram dump 2>/dev/null 1> "warp_${run_id}_${osd}_hist.json"
+done
+#+end_src
+
+#+RESULTS:
+
 
 ** Client Operations
 #+CALL: client_op_table[:results value table](json_file=rgw_s3_bench_perf)
 
 #+name: rgw_s3_bench_osdops
 #+RESULTS:
-| stat      | 20947 |
-| create    |  2125 |
-| read      | 17836 |
-| writefull |  6375 |
-| setxattr  | 17000 |
-| cmpxattr  |  2265 |
-| call      | 39004 |
+| stat      | 20409 |
+| create    |  2111 |
+| read      | 17797 |
+| writefull |  6333 |
+| setxattr  | 16888 |
+| cmpxattr  |  2111 |
+| call      | 37615 |
 | watch     |   150 |
-| other     | 16417 |
+| other     | 16187 |
 | omap_rd   |     2 |
 
 #+CALL: pie_plot[:file "./rgw_warp_osdops.svg"](tab=rgw_s3_bench_osdops)
@@ -1096,10 +1110,10 @@ jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMe
 
 #+RESULTS:
 : {
-:   "msgr_recv_messages": 44250,
-:   "msgr_send_messages": 44310,
-:   "msgr_recv_bytes": 62210035891,
-:   "msgr_send_bytes": 22153770531,
+:   "msgr_recv_messages": 43295,
+:   "msgr_send_messages": 43355,
+:   "msgr_recv_bytes": 62041669362,
+:   "msgr_send_bytes": 22053219662,
 :   "msgr_recv_encrypted_bytes": 0,
 :   "msgr_send_encrypted_bytes": 11504
 : }
@@ -1111,29 +1125,30 @@ jq -r 'to_entries | map(select(.key | test("^objecter"))) | .[] | [.key, .value.
 
 #+RESULTS:
 | objecter            |         0.0 |
-| objecter-0x43dbad00 |         0.0 |
-| objecter-0x43dbaf70 | 0.040378228 |
+| objecter-0x2639a340 |         0.0 |
+| objecter-0x2639add0 | 0.043418261 |
 
 ** OSD
 #+caption: Get OSD latency counters
-#+begin_src bash :noweb yes :results output verbatim table
+#+begin_src bash :noweb yes :results output verbatim table :var perf=rgw_s3_bench_perf
 <<env>>
 <<get_daemons>>
-echo "target op_latency"
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+echo "target op_latency op_r_latency op_w_latency op_rw_latency"
 for osd in $(osds); do
     echo -n "$osd "
-    ceph tell $osd perf dump 2>/dev/null \
-     | jq '.osd.op_latency.avgtime'
+    jq -r '[.osd.op_latency.avgtime, .osd.op_r_latency.avgtime, .osd.op_w_latency.avgtime, .osd.op_rw_latency.avgtime] | @tsv ' \
+       < "warp_${run_id}_${osd}_perf.json"
 done
 #+end_src
 
 #+RESULTS:
-| target |  op_latency |
-| osd.0  | 0.039793348 |
-| osd.1  |   0.0398738 |
-| osd.2  | 0.035141152 |
+| target |  op_latency | op_r_latency | op_w_latency | op_rw_latency |
+| osd.0  | 0.041201573 |  0.005672571 |  0.099334064 |   0.083447218 |
+| osd.1  | 0.044812809 |  0.005676555 |  0.098463874 |   0.082343773 |
+| osd.2  | 0.039115449 |  0.005419339 |  0.098269827 |   0.082073632 |
 
-** OSD Latency Histogram
+** OSD Latency Histograms
 #+caption: Get OSD op histograms
 #+begin_src bash :noweb yes :results output table
 <<env>>
@@ -1160,21 +1175,19 @@ And (2) what number of bytes they count.
 
 (see =void PrimaryLogPG::log_op_stats(const OpRequest& op, const uint64_t inb, const uint64_t outb)=)
 
+*** 1D: latency buckets
+
 #+caption: OSD histograms as one dimensional (latency)
-#+begin_src bash :noweb yes :results output table
-<<env>>
+#+begin_src bash :noweb yes :results output table :var perf=rgw_s3_bench_perf
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
 echo -e 'bucket\trw in\trw out\tread out\twrite in'
-paste <(ceph tell osd.0 perf histogram dump osd op_rw_latency_in_bytes_histogram 2>/dev/null \
-            | jq -r ".osd.op_rw_latency_in_bytes_histogram" \
-            | ./perf_hist_dump.py 1d) \
-      <(ceph tell osd.0 perf histogram dump osd op_rw_latency_out_bytes_histogram 2>/dev/null \
-            | jq -r ".osd.op_rw_latency_out_bytes_histogram" \
+paste <(jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
+              | ./perf_hist_dump.py 1d) \
+      <(jq -r ".osd.op_rw_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
             | ./perf_hist_dump.py 1d | cut -f 2) \
-      <(ceph tell osd.0 perf histogram dump osd op_r_latency_out_bytes_histogram 2>/dev/null \
-            | jq -r ".osd.op_r_latency_out_bytes_histogram" \
+      <(jq -r ".osd.op_r_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
             | ./perf_hist_dump.py 1d | cut -f 2) \
-      <(ceph tell osd.0 perf histogram dump osd op_w_latency_in_bytes_histogram 2>/dev/null \
-            | jq -r ".osd.op_w_latency_in_bytes_histogram" \
+      <(jq -r ".osd.op_w_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
             | ./perf_hist_dump.py 1d | cut -f 2)
 #+end_src
 
@@ -1182,18 +1195,18 @@ paste <(ceph tell osd.0 perf histogram dump osd op_rw_latency_in_bytes_histogram
 | bucket        | rw in | rw out | read out | write in |
 | <0            |     0 |      0 |        0 |        0 |
 | 0ns…99µs      |     0 |      0 |        0 |        0 |
-| 100µs…199µs   |     0 |      0 |       42 |        0 |
-| 200µs…399µs   |     0 |      0 |     2247 |        0 |
-| 400µs…799µs   |     0 |      0 |     1498 |        0 |
-| 800µs…1ms     |     0 |      0 |      219 |        0 |
-| 1ms…3ms       |     0 |      0 |      431 |        0 |
-| 3ms…6ms       |    11 |     11 |     1366 |        0 |
-| 6ms…12ms      |   147 |    147 |     1637 |        0 |
-| 12ms…25ms     |   592 |    592 |      911 |        0 |
-| 25ms…51ms     |   987 |    987 |      311 |       19 |
-| 51ms…102ms    |  2349 |   2349 |       92 |     1200 |
-| 102ms…204ms   |   667 |    667 |        8 |      812 |
-| 204ms…409ms   |    34 |     34 |        0 |       38 |
+| 100µs…199µs   |     0 |      0 |       20 |        0 |
+| 200µs…399µs   |     0 |      0 |     1817 |        0 |
+| 400µs…799µs   |     0 |      0 |     1220 |        0 |
+| 800µs…1ms     |     0 |      0 |      248 |        0 |
+| 1ms…3ms       |     0 |      0 |      719 |        0 |
+| 3ms…6ms       |     0 |      0 |     1732 |        0 |
+| 6ms…12ms      |     0 |      0 |     1373 |        0 |
+| 12ms…25ms     |     0 |      0 |      630 |        0 |
+| 25ms…51ms     |   679 |    679 |      176 |        6 |
+| 51ms…102ms    |  2225 |   2225 |       44 |     1302 |
+| 102ms…204ms   |   849 |    849 |       12 |      817 |
+| 204ms…409ms   |    31 |     31 |        0 |        9 |
 | 409ms…819ms   |     0 |      0 |        0 |        0 |
 | 819ms…1s      |     0 |      0 |        0 |        0 |
 | 1s…3s         |     0 |      0 |        0 |        0 |
@@ -1218,6 +1231,135 @@ Very interesting!
 We see that:
 - fast reads dominate the count
 - rw in and rw out are the same, as they differ only in the bytes dimension
+
+*** 2D: latency ❌ bytes
+#+caption: OSD 0 write latency histogram matrix latency ❌ bytes
+#+begin_src bash :noweb yes :results output table :var perf=rgw_s3_bench_perf
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+jq -r ".osd.op_w_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
+    | ./perf_hist_dump.py 2d
+#+end_src
+
+#+RESULTS:
+| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 200µs…399µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 400µs…799µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 800µs…1ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1ms…3ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 25ms…51ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     4 |      0 |       0 |    0 |
+| 51ms…102ms  |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   461 |   841 |      0 |       0 |    0 |
+| 102ms…204ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   268 |   549 |      0 |       0 |    0 |
+| 204ms…409ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     1 |     8 |      0 |       0 |    0 |
+| 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3s…6s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6s…13s      |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+
+#+caption: OSD 0 read latency histogram matrix latency ❌ bytes
+#+begin_src bash :noweb yes :results output table :var perf=rgw_s3_bench_perf
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+jq -r ".osd.op_r_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
+    | ./perf_hist_dump.py 2d
+#+end_src
+
+#+RESULTS:
+| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 100µs…199µs |     0 |       20 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 200µs…399µs |    31 |     1421 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   333 |    32 |      0 |       0 |    0 |
+| 400µs…799µs |    45 |      413 |     9 |     1 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   185 |   567 |      0 |       0 |    0 |
+| 800µs…1ms   |    17 |       39 |    26 |     3 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    59 |   104 |      0 |       0 |    0 |
+| 1ms…3ms     |     3 |       21 |     5 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   382 |   308 |      0 |       0 |    0 |
+| 3ms…6ms     |     1 |       33 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   530 |  1168 |      0 |       0 |    0 |
+| 6ms…12ms    |     2 |       38 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   313 |  1020 |      0 |       0 |    0 |
+| 12ms…25ms   |     3 |       26 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   135 |   466 |      0 |       0 |    0 |
+| 25ms…51ms   |     0 |       21 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    35 |   120 |      0 |       0 |    0 |
+| 51ms…102ms  |     0 |        8 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    10 |    26 |      0 |       0 |    0 |
+| 102ms…204ms |     0 |        3 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     7 |      0 |       0 |    0 |
+| 204ms…409ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3s…6s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6s…13s      |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+
+#+caption: OSD 0 read/write latency data out histogram matrix latency ❌ bytes
+#+begin_src bash :noweb yes :results output table :var perf=rgw_s3_bench_perf
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+jq -r ".osd.op_rw_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
+    | ./perf_hist_dump.py 2d
+#+end_src
+
+#+RESULTS:
+| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 200µs…399µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 400µs…799µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 800µs…1ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1ms…3ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 25ms…51ms   |   679 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 51ms…102ms  |  2225 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 102ms…204ms |   849 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 204ms…409ms |    31 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3s…6s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6s…13s      |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+
+#+caption: OSD 0 read/write latency data in histogram matrix latency ❌ bytes
+#+begin_src bash :noweb yes :results output table :var perf=rgw_s3_bench_perf
+run_id="$(sed -e 's/.*warp_\(.*\)_perf.*/\1/g' <<< "$perf")"
+jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" \
+    | ./perf_hist_dump.py 2d
+#+end_src
+
+#+RESULTS:
+| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 200µs…399µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 400µs…799µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 800µs…1ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1ms…3ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 25ms…51ms   |   495 |      184 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 51ms…102ms  |  1820 |      405 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 102ms…204ms |   780 |       69 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 204ms…409ms |    31 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 3s…6s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 6s…13s      |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 
 * Misc
 ** Perf Counter Stats
