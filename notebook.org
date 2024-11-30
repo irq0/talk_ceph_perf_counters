@@ -442,6 +442,26 @@ Questions:
 - What besides storing the use data happens?
 - How much overhead in terms of ops and bytes is a 4MB PUT?
 
+** Perf Counters
+- =objecter=
+  - =.osdop_*=,
+  - =.omap_*=
+- =AsyncMessenger::Worker-*=
+  - =msgr_recv_messages=
+  - =msgr_send_messages=
+  - =msgr_recv_bytes=
+  - =msgr_send_bytes=
+  - =msgr_recv_encrypted_bytes=
+  - =msgr_send_encrypted_bytes=
+- =osd=
+  - =op=
+  - =op_in_bytes=
+  - =op_out_bytes=
+  - =subop=
+  - =subop_in_bytes=
+- =bluestore=
+  - =omap_{iterator|rmkeys|rmkey_range|setheader|setkeys}_count=
+
 ** Set up bucket; Reset metrics
 #+caption: Create bucket and reset performance counters
 #+begin_src bash :noweb yes :results output discard
