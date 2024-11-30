@@ -317,13 +317,13 @@ waitpid $pid
 
 #+RESULTS:
 : ++ pgrep radosgw
-: + pid=583827
+: + pid=798452
 : + readarray -d '' cmd
-: + kill 583827
-: + waitpid 583827
+: + kill 798452
+: + waitpid 798452
 : + /compile2/ceph/wip/build/bin/radosgw -c /compile2/ceph/wip/build/ceph.conf --log-file=/compile2/ceph/wip/build/out/radosgw.8000.log --admin-socket=/compile2/ceph/wip/build/out/radosgw.8000.asok --pid-file=/compile2/ceph/wip/build/out/radosgw.8000.pid --rgw_luarocks_location=/compile2/ceph/wip/build/out/radosgw.8000.luarocks -n client.rgw.8000 '--rgw_frontends=beast port=8000'
-: 2024-11-29T12:32:45.829+0100 7f0c598cfbc0 -1 WARNING: all dangerous and experimental features are enabled.
-: 2024-11-29T12:32:45.841+0100 7f0c598cfbc0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2024-11-30T15:47:41.566+0100 7f730603dbc0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2024-11-30T15:47:41.579+0100 7f730603dbc0 -1 WARNING: all dangerous and experimental features are enabled.
 
 Let's see if there were S3 operations already (there should not):
 
@@ -355,8 +355,8 @@ Now get RADOS operations counted since start:
 #+name: rgw_startup_osdops
 #+RESULTS:
 | read   | 17 |
-| call   | 15 |
-| create | 11 |
+| call   |  9 |
+| create |  9 |
 | watch  |  9 |
 | other  | 32 |
 
@@ -365,32 +365,7 @@ Now get RADOS operations counted since start:
 #+RESULTS:
 [[file:./rgw_startup_osdops.svg]]
 
-Note: In the =perf dump= there is more than one =objecter= entry. Each belongs to a separate librados connection.
-They share the same network stack, so =AsyncMessenger= metrics see Messages of all librados / objecter entries.
-
-In the Op mix we readily see that RGW uses many /call/ operations to Object Classes.
-This is specialized RGW operations like Bucket Index modifications that run on the OSD.
-
 Looking at the =perf dump= we see 3 messenger entries. One for each worker. A worker is it's own event loop. The messenger distributes connections between them.
-
-#+begin_src bash :noweb yes :results output
-<<env>>
-ceph daemon $out/radosgw.8000.asok perf dump | \
-    jq '(.["AsyncMessenger::Worker-0"] + .["AsyncMessenger::Worker-1"] + .["AsyncMessenger::Worker-2"]) |
-            with_entries(select(.key | test(".*_(messages|bytes)$")))'
-#+end_src
-
-#+RESULTS:
-: {
-:   "msgr_recv_messages": 68,
-:   "msgr_send_messages": 71,
-:   "msgr_recv_bytes": 78714,
-:   "msgr_send_bytes": 25592,
-:   "msgr_recv_encrypted_bytes": 58800,
-:   "msgr_send_encrypted_bytes": 640
-: }
-
-Question: Is the work distributed equally between the workers?
 
 #+begin_src bash :noweb yes :results output
 <<env>>
@@ -402,28 +377,28 @@ ceph daemon $out/radosgw.8000.asok perf dump | \
 #+RESULTS:
 #+begin_example
 {
-  "msgr_recv_messages": 72,
-  "msgr_send_messages": 71,
-  "msgr_recv_bytes": 139477,
-  "msgr_send_bytes": 24610,
-  "msgr_recv_encrypted_bytes": 118992,
+  "msgr_recv_messages": 67,
+  "msgr_send_messages": 66,
+  "msgr_recv_bytes": 136830,
+  "msgr_send_bytes": 22659,
+  "msgr_recv_encrypted_bytes": 118256,
   "msgr_send_encrypted_bytes": 1568
 }
 {
-  "msgr_recv_messages": 64,
-  "msgr_send_messages": 68,
-  "msgr_recv_bytes": 21744,
-  "msgr_send_bytes": 110534,
-  "msgr_recv_encrypted_bytes": 1536,
-  "msgr_send_encrypted_bytes": 86880
+  "msgr_recv_messages": 46,
+  "msgr_send_messages": 52,
+  "msgr_recv_bytes": 17494,
+  "msgr_send_bytes": 105134,
+  "msgr_recv_encrypted_bytes": 144,
+  "msgr_send_encrypted_bytes": 86592
 }
 {
-  "msgr_recv_messages": 68,
-  "msgr_send_messages": 71,
-  "msgr_recv_bytes": 78714,
-  "msgr_send_bytes": 25592,
-  "msgr_recv_encrypted_bytes": 58800,
-  "msgr_send_encrypted_bytes": 640
+  "msgr_recv_messages": 49,
+  "msgr_send_messages": 51,
+  "msgr_recv_bytes": 73769,
+  "msgr_send_bytes": 17300,
+  "msgr_recv_encrypted_bytes": 59824,
+  "msgr_send_encrypted_bytes": 928
 }
 #+end_example
 
@@ -449,8 +424,8 @@ ceph daemon $out/radosgw.8000.asok perf dump | \
 | cmpxattr     |   0 |
 | rmxattr      |   0 |
 | resetxattrs  |   0 |
-| call         | 150 |
-| watch        |  60 |
+| call         | 120 |
+| watch        |  10 |
 | notify       |   0 |
 | src_cmpxattr |   0 |
 | pgls         |   0 |
