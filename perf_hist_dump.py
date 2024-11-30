@@ -24,7 +24,7 @@ def format_bytes(size):
     while size >= 1024 and n < len(units) - 1:
         size /= 1024
         n += 1
-    return f"{size:.1f}{units[n]}"
+    return f"{size:.0f}{units[n]}"
 
 # TODO don't assume we have time x bytes axes
 def perf_hist_dump_1d(data):
@@ -47,11 +47,13 @@ def perf_hist_dump_2d(data):
     ax_bytes = axes[1]
     vals = data["values"]
     cutoff_bytes = 32*1024**2
-    cutoff_time = 420*10**9
+    cutoff_time = 104*10**9
     headers = []
     for i, col_range in enumerate(ax_bytes["ranges"]):
         if "max" in col_range and col_range["max"] == -1:
-            headers.append("<0")
+            # < zero bytes would be very odd..
+            pass
+            #headers.append("<0")
         elif "max" not in col_range:
             headers.append(f">{format_bytes(ax_bytes['ranges'][i-1]['max'])}")
         elif col_range["max"] > cutoff_bytes:
@@ -72,10 +74,14 @@ def perf_hist_dump_2d(data):
         else:
             line_header = f"{format_duration(row_range["min"])}…{format_duration(row_range["max"])}"
 
-        cols = "\t".join((str(vals[row][i]) if ax_bytes["ranges"][i].get("max", -1) <= cutoff_bytes
-                          else str(sum((vals[row][j] for j in range(i, len(vals[row])))))
-                          for i in range(len(vals[row]))))
-        print(f"{line_header:40s}{cols}")
+        cols = []
+        for i in range(1, len(vals[row])):
+            if ax_bytes["ranges"][i].get("max", -1) <= cutoff_bytes:
+                cols.append(str(vals[row][i]))
+            else:
+                cols.append(str(sum((vals[row][j] for j in range(i, len(vals[row]))))))
+                break
+        print(f"{line_header}\t{'\t'.join(cols)}")
         if row_range["max"] > cutoff_time:
             break
 
