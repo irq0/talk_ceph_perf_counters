@@ -527,15 +527,18 @@ jq '.[] | with_entries(select((.key | test("^(osdop|omap)_")) and (.value > 0) )
 #+end_src
 
 #+RESULTS:
-: upload: '/tmp/random_4mb' -> 's3://testbucket/13359'  [1 of 1]
-:    65536 of 4194304     1% in    0s    14.62 MB/s 4194304 of 4194304   100% in    0s    58.99 MB/s  done
-: {
-:   "osdop_stat": 2,
-:   "osdop_create": 1,
-:   "osdop_writefull": 1,
-:   "osdop_setxattr": 9,
-:   "osdop_call": 5
-: }
+#+begin_example
+upload: '/tmp/random_4mb' -> 's3://testbucket/20550'  [1 of 1]
+   65536 of 4194304     1% in    0s    15.80 MB/s 4194304 of 4194304   100% in    0s    55.45 MB/s  done
+{
+  "osdop_stat": 2,
+  "osdop_create": 1,
+  "osdop_read": 1,
+  "osdop_writefull": 1,
+  "osdop_setxattr": 9,
+  "osdop_call": 6
+}
+#+end_example
 
 =s3cmd= returned success. We collected the stats. We now also check the logs for the entry that RGW prints
 after finishing an operation. This also gives us the latency number for that individual operation.
@@ -547,7 +550,7 @@ tac $out/radosgw.8000.log | grep -E -m1 'beast:.*PUT /testbucket'
 #+end_src
 
 #+RESULTS:
-: 2024-11-29T12:42:45.821+0100 7f0be538f6c0  1 beast: 0x7f0c53e61200: ::1 - testid [29/Nov/2024:12:42:45.758 +0100] "PUT /testbucket/13359 HTTP/1.1" 200 4194304 - - - latency=0.063001677s
+: 2024-11-30T15:58:51.442+0100 7f72ba58f6c0  1 beast: 0x7f73055ff200: ::1 - testid [30/Nov/2024:15:58:51.374 +0100] "PUT /testbucket/20550 HTTP/1.1" 200 4194304 - - - latency=0.067001745s
 
 #+CALL: client_op_table[:results value table](json_file="rgw_put_perf.json")
 
@@ -555,9 +558,10 @@ tac $out/radosgw.8000.log | grep -E -m1 'beast:.*PUT /testbucket'
 #+RESULTS:
 | stat      | 2 |
 | create    | 1 |
+| read      | 1 |
 | writefull | 1 |
 | setxattr  | 9 |
-| call      | 5 |
+| call      | 6 |
 
 #+CALL: pie_plot[:file "./rgw_put_osdops.svg"](tab=rgw_put_osdops)
 
@@ -572,7 +576,7 @@ jq '[.[] | .op] | add' "rgw_put_perf.json"
 #+end_src
 
 #+RESULTS: get_num_op_s3_put
-: 3
+: 4
 
 The =op= counter is not the same as the sum of the =osdop= counters
 
@@ -584,7 +588,7 @@ jq '[.[] | with_entries(select(.key | test ("^(osdop|omap)_"))) | .[] ] | add' "
 #+end_src
 
 #+RESULTS: get_num_osdop_s3_put
-: 18
+: 20
 
 #+caption: Get messenger perf counters
 #+begin_src bash :noweb yes :results output verbatim
@@ -597,10 +601,10 @@ jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMe
 
 #+RESULTS:
 : {
-:   "msgr_recv_messages": 3,
-:   "msgr_send_messages": 3,
-:   "msgr_recv_bytes": 1481,
-:   "msgr_send_bytes": 4197637,
+:   "msgr_recv_messages": 4,
+:   "msgr_send_messages": 4,
+:   "msgr_recv_bytes": 1991,
+:   "msgr_send_bytes": 4198013,
 :   "msgr_recv_encrypted_bytes": 0,
 :   "msgr_send_encrypted_bytes": 0
 : }
@@ -613,7 +617,7 @@ jq '[."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger:
 #+end_src
 
 #+RESULTS: get_num_send_messages
-: 3
+: 4
 
 #+caption: Calculate message overhead from send bytes vs. 4MB PUT
 #+name: get_sent_overhead
@@ -626,20 +630,20 @@ echo $overhead
 #+end_src
 
 #+RESULTS: get_sent_overhead
-: 3333
+: 3709
 
 ** Analysis
 
 We saw:
-- A sum of call_get_num_osdop_s3_put() {{{results(=18=)}}} OSD Ops
-- The op counter reported call_get_num_op_s3_put() {{{results(=3=)}}} OSD Ops.
--  call_get_num_send_messages() {{{results(=3=)}}} messages sent by the messenger.
+- A sum of call_get_num_osdop_s3_put() {{{results(=20=)}}} OSD Ops
+- The op counter reported call_get_num_op_s3_put() {{{results(=4=)}}} OSD Ops.
+-  call_get_num_send_messages() {{{results(=4=)}}} messages sent by the messenger.
 
 At first the difference between op counter and sum of ops might be strange, but in RADOS an Operation may consists of many combined Operations. They can even depend on each other to build things like conditional writes (a version assert followed by a write).
 
 We also learn that a PUT is not just a write. There is metadata (setxattr) and data structures (call ops) to update as well.
 
-Our overhead in bytes: call_get_sent_overhead() {{{results(=3333=)}}}.
+Our overhead in bytes: call_get_sent_overhead() {{{results(=3709=)}}}.
 
 ** Bonus: Messenger Connections
 Question: Where is my RadosGW connected to?
@@ -659,17 +663,17 @@ done \
 
 #+RESULTS:
 #+begin_example
-192.168.101.23:6818 	 osd 	 id:-1 gid:0
+192.168.101.23:6800 	 mgr 	 id:-1 gid:0
 192.168.101.23:6802 	 osd 	 id:-1 gid:0
 192.168.101.23:6810 	 osd 	 id:-1 gid:0
+192.168.101.23:40393 	 mon 	 id:-1 gid:0
 192.168.101.23:6800 	 mgr 	 id:-1 gid:0
-192.168.101.23:40429 	 mon 	 id:-1 gid:0
-192.168.101.23:6818 	 osd 	 id:-1 gid:0
+192.168.101.23:6802 	 osd 	 id:-1 gid:0
 192.168.101.23:6810 	 osd 	 id:-1 gid:0
+192.168.101.23:6818 	 osd 	 id:-1 gid:0
+192.168.101.23:40391 	 mon 	 id:-1 gid:0
 192.168.101.23:6800 	 mgr 	 id:-1 gid:0
-192.168.101.23:40429 	 mon 	 id:-1 gid:0
-192.168.101.23:6800 	 mgr 	 id:-1 gid:0
-192.168.101.23:40427 	 mon 	 id:-1 gid:0
+192.168.101.23:40393 	 mon 	 id:-1 gid:0
 #+end_example
 
 /For some reason the librados messenger doesn't set the peer ids/
@@ -702,28 +706,28 @@ done
 #+begin_example
 osd.0
 {
-  "msgr_recv_messages": 63,
-  "msgr_send_messages": 63,
-  "msgr_recv_bytes": 4259755,
-  "msgr_send_bytes": 194409,
+  "msgr_recv_messages": 144,
+  "msgr_send_messages": 145,
+  "msgr_recv_bytes": 4223019,
+  "msgr_send_bytes": 159460,
   "msgr_recv_encrypted_bytes": 0,
   "msgr_send_encrypted_bytes": 107872
 }
 osd.1
 {
-  "msgr_recv_messages": 82,
-  "msgr_send_messages": 81,
-  "msgr_recv_bytes": 4268042,
-  "msgr_send_bytes": 113417,
+  "msgr_recv_messages": 169,
+  "msgr_send_messages": 170,
+  "msgr_recv_bytes": 4230255,
+  "msgr_send_bytes": 171365,
   "msgr_recv_encrypted_bytes": 0,
-  "msgr_send_encrypted_bytes": 0
+  "msgr_send_encrypted_bytes": 99424
 }
 osd.2
 {
-  "msgr_recv_messages": 76,
-  "msgr_send_messages": 77,
-  "msgr_recv_bytes": 4271636,
-  "msgr_send_bytes": 8579582,
+  "msgr_recv_messages": 210,
+  "msgr_send_messages": 211,
+  "msgr_recv_bytes": 4234690,
+  "msgr_send_bytes": 8547265,
   "msgr_recv_encrypted_bytes": 0,
   "msgr_send_encrypted_bytes": 88160
 }
@@ -744,27 +748,27 @@ done
 #+begin_example
 osd.0
 {
-  "op": 20,
+  "op": 6,
   "op_in_bytes": 0,
-  "op_out_bytes": 55,
-  "subop": 25,
-  "subop_in_bytes": 4213017
+  "op_out_bytes": 224,
+  "subop": 3,
+  "subop_in_bytes": 4198251
 }
 osd.1
 {
-  "op": 22,
+  "op": 4,
   "op_in_bytes": 0,
-  "op_out_bytes": 66,
-  "subop": 21,
-  "subop_in_bytes": 4209613
+  "op_out_bytes": 0,
+  "subop": 1,
+  "subop_in_bytes": 4196187
 }
 osd.2
 {
-  "op": 19,
+  "op": 4,
   "op_in_bytes": 4194304,
-  "op_out_bytes": 55,
-  "subop": 24,
-  "subop_in_bytes": 16834
+  "op_out_bytes": 0,
+  "subop": 2,
+  "subop_in_bytes": 2064
 }
 #+end_example
 
@@ -789,24 +793,24 @@ done \
 #+begin_example
 {
   "omap_iterator_count": 0,
-  "omap_rmkeys_count": 100,
+  "omap_rmkeys_count": 0,
   "omap_rmkey_range_count": 0,
   "omap_setheader_count": 1,
-  "omap_setkeys_count": 37
+  "omap_setkeys_count": 5
 }
 {
   "omap_iterator_count": 0,
-  "omap_rmkeys_count": 100,
+  "omap_rmkeys_count": 0,
   "omap_rmkey_range_count": 0,
   "omap_setheader_count": 1,
-  "omap_setkeys_count": 37
+  "omap_setkeys_count": 5
 }
 {
   "omap_iterator_count": 0,
-  "omap_rmkeys_count": 100,
+  "omap_rmkeys_count": 0,
   "omap_rmkey_range_count": 0,
   "omap_setheader_count": 1,
-  "omap_setkeys_count": 37
+  "omap_setkeys_count": 5
 }
 #+end_example
 
