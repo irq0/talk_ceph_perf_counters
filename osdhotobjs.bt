@@ -1,0 +1,9 @@
+usdt:*:osd:do_osd_op_post {
+  @objs[str(arg0)] = count();
+}
+
+interval:s:2 {
+  printf("\n%s\n", strftime("%H:%M:%S", nsecs));
+  print(@objs);
+  clear(@objs);
+}

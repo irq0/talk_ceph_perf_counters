@@ -1,0 +1,45 @@
+// Trace OSD omap operations
+BEGIN {
+  printf("OBJ\t\tOP\tARGS\n")
+}
+
+usdt:*:osd:do_osd_op_pre_omapgetkeys {
+  printf("GET KEYS          %s\tstart:%s max:%d\n",
+         str(arg0, 128), str(arg2), arg3);
+}
+usdt:*:osd:do_osd_op_pre_omapgetvals {
+  printf("GET VALS          %s\t start:%s max:%d prefix:%s\n",
+         str(arg0, 128), str(arg2), arg3, str(arg4));
+}
+usdt:*:osd:do_osd_op_pre_omapgetheader {
+  printf("GET HEADER        %s\n",
+         str(arg0, 128));
+}
+usdt:*:osd:do_osd_op_pre_omapsetheader {
+  printf("SET HEADER        %s\n",
+         str(arg0, 128));
+}
+usdt:*:osd:do_osd_op_pre_omapclear {
+  printf("CLEAR             %s\n",
+         str(arg0, 128));
+}
+usdt:*:osd:do_osd_op_pre_omapgetvalsbykeys {
+  printf("GET VALS BY KEYS  %s\tkeys:%s\n",
+         str(arg0, 128), str(arg2));
+}
+usdt:*:osd:do_osd_op_pre_omap_cmp {
+  printf("CMP               %s\tassertions:%s\n",
+         str(arg0, 128), str(arg2));
+}
+usdt:*:osd:do_osd_op_pre_omapsetvals {
+  printf("SET VALS          %s\t\n",
+         str(arg0, 128));
+}
+usdt:*:osd:do_osd_op_pre_omaprmkeys {
+  printf("RM KEYS           %s\n",
+         str(arg0, 128));
+}
+
+usdt:*:osd:do_osd_op_pre_omap* {
+  @[probe] = count();
+}

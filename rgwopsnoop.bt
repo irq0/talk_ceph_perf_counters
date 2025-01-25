@@ -1,0 +1,23 @@
+BEGIN {
+  printf("CALL       REQ_ID\tTID\tTHREAD\t\tOPCODE\tRET\tLENGTH\n");
+}
+
+// RGWOp::complete(..)
+uprobe:/compile2/ceph/wip/build/bin/radosgw:_ZN5RGWOp8completeEv {
+  $op = (RGWOp*)(arg0);
+  $req_id = $op->s->id;
+  $elapsed = (nsecs - @reqs[$req_id]) / 1000000;
+  $opcode = $op->s->op_type;
+  printf("complete   %x\t%d\t%s\t%d\t%d\t%d\n", $req_id, tid, comm, $opcode, $op->op_ret, $op->s->content_length);
+  @lat_hist_ms[$opcode] = hist($elapsed);
+  @lat_stat[$opcode] = stats($elapsed);
+  delete(@reqs[$req_id])
+}
+// RGWOp::init(..)
+uprobe:/compile2/ceph/wip/build/bin/radosgw:_ZN5RGWOp4initEPN3rgw3sal6DriverEP9req_stateP10RGWHandler {
+  $op = (RGWOp*)(arg0);
+  $req = (struct req_state*)(arg2);
+  $req_id = $req->id;
+  printf("init       %x\t%d\t%s\n", $req_id, tid, comm);
+  @reqs[$req_id] = nsecs;
+}
