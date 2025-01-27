@@ -338,7 +338,7 @@ echo -n "./${perf_file}"
 #+end_src
 
 #+RESULTS: run_warp
-[[file:./warp_13108_perf.json]]
+[[file:./warp_297838a4-5a65-4c97-a708-43f35c4b1f46_perf.json]]
 
 * Experiment: RGW Startup
 /Restart RGW. Snapshot op and network counters./
@@ -506,15 +506,12 @@ Questions:
 - =bluestore=
   - =omap_{iterator|rmkeys|rmkey_range|setheader|setkeys}_count=
 
-** Set up bucket; Reset metrics
-#+caption: Create bucket and reset performance counters
+** Set up bucket
+#+caption: Create bucket
 #+begin_src bash :noweb yes :results output discard
 <<env>>
 <<env_s3>>
-<<reset_fns>>
-s3 mb s3://testbucket
-reset_rgw_perf_counters
-reset_daemon_perf_counters
+#s3 mb s3://testbucket
 #+end_src
 
 #+RESULTS:
@@ -533,25 +530,37 @@ We run an S3 PUT using =s3cmd= and right afterwards collect =perf dump=
 
 #+caption: (1) S3 PUT operation (2) Get non-zero RADOS operation counter
 #+begin_src bash :noweb yes :results output verbatim
+set -x
 <<env>>
 <<env_s3>>
 <<testfile>>
+<<reset_fns>>
+
+(sudo python3 -u ./radostrace.py $(pgrep radosgw) > "rgw_put_radostrace.log") &
+sleep 5
+reset_rgw_perf_counters
+reset_daemon_perf_counters
 s3 put $(testfile_4mb) s3://testbucket/$RANDOM | tr -d "\r"
 ceph daemon $out/radosgw.8000.asok perf dump > "rgw_put_perf.json"
 jq '.[] | with_entries(select((.key | test("^(osdop|omap)_")) and (.value > 0) )) | select(length > 0)' "rgw_put_perf.json"
+sleep 5
+kill %1
+wait
 #+end_src
 
 #+RESULTS:
 #+begin_example
-upload: '/tmp/random_4mb' -> 's3://testbucket/20550'  [1 of 1]
-   65536 of 4194304     1% in    0s    15.80 MB/s 4194304 of 4194304   100% in    0s    55.45 MB/s  done
+{
+    "success": "perf reset all"
+}
+upload: '/tmp/random_4mb' -> 's3://testbucket/30641'  [1 of 1]
+   65536 of 4194304     1% in    0s    15.29 MB/s 4194304 of 4194304   100% in    0s    48.78 MB/s  done
 {
   "osdop_stat": 2,
   "osdop_create": 1,
-  "osdop_read": 1,
   "osdop_writefull": 1,
   "osdop_setxattr": 9,
-  "osdop_call": 6
+  "osdop_call": 5
 }
 #+end_example
 
@@ -565,18 +574,17 @@ tac $out/radosgw.8000.log | grep -E -m1 'beast:.*PUT /testbucket'
 #+end_src
 
 #+RESULTS:
-: 2024-11-30T15:58:51.442+0100 7f72ba58f6c0  1 beast: 0x7f73055ff200: ::1 - testid [30/Nov/2024:15:58:51.374 +0100] "PUT /testbucket/20550 HTTP/1.1" 200 4194304 - - - latency=0.067001745s
+: 2025-01-27T23:32:43.876+0100 7f35ae92b6c0  1 beast: 0x7f34def6b200: ::1 - testid [27/Jan/2025:23:32:43.798 +0100] "PUT /testbucket/30641 HTTP/1.1" 200 4194304 - - - latency=0.077001937s
 
-#+CALL: client_op_table[:results value table](json_file="rgw_put_perf.json")
+#+CALL: client_op_table[:results value table](json_file="rgw_put_perf.json", skip_ops="watch")
 
 #+name: rgw_put_osdops
 #+RESULTS:
 | stat      | 2 |
 | create    | 1 |
-| read      | 1 |
 | writefull | 1 |
 | setxattr  | 9 |
-| call      | 6 |
+| call      | 5 |
 
 #+CALL: pie_plot[:file "./rgw_put_osdops.svg"](tab=rgw_put_osdops)
 
@@ -591,7 +599,7 @@ jq '[.[] | .op] | add' "rgw_put_perf.json"
 #+end_src
 
 #+RESULTS: get_num_op_s3_put
-: 4
+: 3
 
 The =op= counter is not the same as the sum of the =osdop= counters
 
@@ -603,7 +611,7 @@ jq '[.[] | with_entries(select(.key | test ("^(osdop|omap)_"))) | .[] ] | add' "
 #+end_src
 
 #+RESULTS: get_num_osdop_s3_put
-: 20
+: 18
 
 #+caption: Get messenger perf counters
 #+begin_src bash :noweb yes :results output verbatim
@@ -616,10 +624,10 @@ jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMe
 
 #+RESULTS:
 : {
-:   "msgr_recv_messages": 4,
-:   "msgr_send_messages": 4,
-:   "msgr_recv_bytes": 1991,
-:   "msgr_send_bytes": 4198013,
+:   "msgr_recv_messages": 3,
+:   "msgr_send_messages": 3,
+:   "msgr_recv_bytes": 1481,
+:   "msgr_send_bytes": 4197648,
 :   "msgr_recv_encrypted_bytes": 0,
 :   "msgr_send_encrypted_bytes": 0
 : }
@@ -632,7 +640,7 @@ jq '[."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMessenger:
 #+end_src
 
 #+RESULTS: get_num_send_messages
-: 4
+: 3
 
 #+caption: Calculate message overhead from send bytes vs. 4MB PUT
 #+name: get_sent_overhead
@@ -645,20 +653,31 @@ echo $overhead
 #+end_src
 
 #+RESULTS: get_sent_overhead
-: 3709
+: 3344
 
 ** Analysis
 
 We saw:
-- A sum of call_get_num_osdop_s3_put() {{{results(=20=)}}} OSD Ops
-- The op counter reported call_get_num_op_s3_put() {{{results(=4=)}}} OSD Ops.
--  call_get_num_send_messages() {{{results(=4=)}}} messages sent by the messenger.
+- A sum of call_get_num_osdop_s3_put() {{{results(=28=)}}} OSD Ops
+- The op counter reported call_get_num_op_s3_put() {{{results(=13=)}}} OSD Ops.
+-  call_get_num_send_messages() {{{results(=18=)}}} messages sent by the messenger.
 
 At first the difference between op counter and sum of ops might be strange, but in RADOS an Operation may consists of many combined Operations. They can even depend on each other to build things like conditional writes (a version assert followed by a write).
 
 We also learn that a PUT is not just a write. There is metadata (setxattr) and data structures (call ops) to update as well.
 
-Our overhead in bytes: call_get_sent_overhead() {{{results(=3709=)}}}.
+Our overhead in bytes: call_get_sent_overhead() {{{results(=8282=)}}}.
+
+** RADOS Op Trace
+#+begin_src bash :noweb yes :results output table
+grep -E -v "(^tracing|watch ping cookie)" "rgw_put_radostrace.log"
+#+end_src
+
+#+RESULTS:
+| [       424] | .dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.5 | stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=217b                                                                                                                                                                                                                                                                                             |   | 21.00ms |
+| [       425] | 903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_29332  | create → setxattr user.rgw.idtag (62) in=76b → setxattr user.rgw.tail_tag (62) in=79b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (351) in=368b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver |   | 48.55ms |
+| [       426] | .dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.5 | stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=373b                                                                                                                                                                                                                                                                                            |   | 28.56ms |
+| [       437] | queues_list_object                                 | omap-get-keys in=12b                                                                                                                                                                                                                                                                                                                                                            |   | 0.63ms  |
 
 ** Bonus: Messenger Connections
 Question: Where is my RadosGW connected to?
@@ -721,30 +740,30 @@ done
 #+begin_example
 osd.0
 {
-  "msgr_recv_messages": 144,
-  "msgr_send_messages": 145,
-  "msgr_recv_bytes": 4223019,
-  "msgr_send_bytes": 159460,
+  "msgr_recv_messages": 711,
+  "msgr_send_messages": 713,
+  "msgr_recv_bytes": 4345123,
+  "msgr_send_bytes": 8789456,
   "msgr_recv_encrypted_bytes": 0,
-  "msgr_send_encrypted_bytes": 107872
+  "msgr_send_encrypted_bytes": 216896
 }
 osd.1
 {
-  "msgr_recv_messages": 169,
-  "msgr_send_messages": 170,
-  "msgr_recv_bytes": 4230255,
-  "msgr_send_bytes": 171365,
+  "msgr_recv_messages": 671,
+  "msgr_send_messages": 675,
+  "msgr_recv_bytes": 4343967,
+  "msgr_send_bytes": 470602,
   "msgr_recv_encrypted_bytes": 0,
-  "msgr_send_encrypted_bytes": 99424
+  "msgr_send_encrypted_bytes": 295632
 }
 osd.2
 {
-  "msgr_recv_messages": 210,
-  "msgr_send_messages": 211,
-  "msgr_recv_bytes": 4234690,
-  "msgr_send_bytes": 8547265,
+  "msgr_recv_messages": 656,
+  "msgr_send_messages": 658,
+  "msgr_recv_bytes": 4351558,
+  "msgr_send_bytes": 373538,
   "msgr_recv_encrypted_bytes": 0,
-  "msgr_send_encrypted_bytes": 88160
+  "msgr_send_encrypted_bytes": 180096
 }
 #+end_example
 
@@ -763,27 +782,27 @@ done
 #+begin_example
 osd.0
 {
-  "op": 6,
-  "op_in_bytes": 0,
-  "op_out_bytes": 224,
-  "subop": 3,
-  "subop_in_bytes": 4198251
-}
-osd.1
-{
-  "op": 4,
-  "op_in_bytes": 0,
-  "op_out_bytes": 0,
-  "subop": 1,
-  "subop_in_bytes": 4196187
-}
-osd.2
-{
-  "op": 4,
+  "op": 16,
   "op_in_bytes": 4194304,
   "op_out_bytes": 0,
   "subop": 2,
   "subop_in_bytes": 2064
+}
+osd.1
+{
+  "op": 6,
+  "op_in_bytes": 0,
+  "op_out_bytes": 0,
+  "subop": 3,
+  "subop_in_bytes": 4198251
+}
+osd.2
+{
+  "op": 11,
+  "op_in_bytes": 0,
+  "op_out_bytes": 0,
+  "subop": 1,
+  "subop_in_bytes": 4196187
 }
 #+end_example
 
@@ -1375,6 +1394,7 @@ jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 | 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+
 
 * Misc
 ** Perf Counter Stats
