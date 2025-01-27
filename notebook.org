@@ -25,6 +25,8 @@ Start a basic "vstart" cluster
 MON=3 OSD=3 MGR=1 RGW=1 MDS=2 NFS=0 ../src/vstart.sh -n
 #+end_src
 
+#+RESULTS:
+
 #+caption: Convenience snippet. Used by most scripts later on. Re-evaluate when restarting the cluster.
 #+name: env
 #+begin_src bash
@@ -51,9 +53,9 @@ ceph osd pool application enable rbd benchmarks
 #+end_src
 
 #+RESULTS:
-: 2024-11-30T15:55:27.325+0100 7fb165f8f6c0 -1 WARNING: all dangerous and experimental features are enabled.
-: 2024-11-30T15:55:27.350+0100 7fb165f8f6c0 -1 WARNING: all dangerous and experimental features are enabled.
-: pool 'rbd' already exists
+: 2025-01-27T21:36:30.821+0100 7ff9266296c0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2025-01-27T21:36:30.845+0100 7ff9266296c0 -1 WARNING: all dangerous and experimental features are enabled.
+: pool 'rbd' created
 
 #+caption: Disable RGW background threads
 #+begin_src bash :noweb yes
@@ -89,25 +91,30 @@ ceph -s 2>/dev/null
     "release": "squid",
     "release_type": "dev"
 }
-v19.3.0-6205-ga98f95a35c4
+v19.3.0-6974-gd170809490b
   cluster:
-    id:     064ec0b9-d86f-4b3e-b28d-33fc22cb7c85
+    id:     7e284701-b88f-4831-976d-60c8e35cd0c3
     health: HEALTH_OK
             (muted: MGR_MODULE_ERROR)
 
   services:
-    mon: 3 daemons, quorum a,b,c (age 10m)
-    mgr: x(active, since 4m)
+    mon: 3 daemons, quorum a,b,c (age 5h)
+    mgr: x(active, since 5h)
     mds: 1/1 daemons up, 1 standby
-    osd: 3 osds: 3 up (since 10m), 3 in (since 10m)
+    osd: 3 osds: 3 up (since 5h), 3 in (since 5h)
     rgw: 1 daemon active (1 hosts, 1 zones)
 
   data:
     volumes: 1/1 healthy
-    pools:   9 pools, 337 pgs
-    objects: 266 objects, 14 KiB
+    pools:   10 pools, 370 pgs
+    objects: 275 objects, 13 KiB
     usage:   3.0 GiB used, 300 GiB / 303 GiB avail
-    pgs:     337 active+clean
+    pgs:     0.270% pgs unknown
+             369 active+clean
+             1   unknown
+
+  io:
+    client:   102 B/s wr, 0 op/s rd, 0 op/s wr
 
 #+end_example
 
@@ -166,11 +173,11 @@ testfile_4mb () {
 #+RESULTS: testfile
 
 #+caption: Generate a environment that has credentials for RGW in the environment
-#+begin_src bash :noweb yes :results code replace
+#+begin_src bash :noweb yes :results code replace :tangle rgw_env
 <<env>>
 creds=($(radosgw-admin user info --uid testid 2>/dev/null | jq -r '.keys[0] | [.access_key, .secret_key] | @tsv'))
-access_key="${creds[0]}"
-secret_key="${creds[1]}"
+access_key="${creds[@]:0:1}"
+secret_key="${creds[@]:1:1}"
 
 cat <<EOF
 access_key="$access_key"
@@ -183,7 +190,7 @@ function s3 () {
 	  --host=http://localhost:8000 \
 	  --no-ssl \
 	  --host-bucket="http://localhost:8000/%(bucket)" \
-	  \$@ 2>/dev/null
+	  \$@
 }
 EOF
 #+end_src
@@ -195,7 +202,7 @@ access_key="0555b35654ad1656d804"
 secret_key="h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="
 
 function s3 () {
-   s3cmd --access_key "0555b35654ad1656d804" 	  --secret_key "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==" 	  --signature-v2 	  --host=http://localhost:8000 	  --no-ssl 	  --host-bucket="http://localhost:8000/%(bucket)" 	  $@ 2>/dev/null
+   s3cmd --access_key "0555b35654ad1656d804" 	  --secret_key "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==" 	  --signature-v2 	  --host=http://localhost:8000 	  --no-ssl 	  --host-bucket="http://localhost:8000/%(bucket)" 	  $@
 }
 #+end_src
 
@@ -204,7 +211,7 @@ function s3 () {
 ** Data Gathering and Plotting
 #+caption: Utility: Generate table of OSD Ops observed on all objecters at asok
 #+name: client_op_table
-#+begin_src python -n :var socket="" json_file=0 rm_zero=1 :results value table :exports code
+#+begin_src python -n :var socket="" json_file=0 rm_zero=1 skip_ops=0 :results value table :exports code
 import subprocess
 import json
 from collections import defaultdict
@@ -221,11 +228,16 @@ elif socket:
          shell=True))
 else:
     return None
+if skip_ops:
+    skip_ops = set(skip_ops.split(","))
 result=defaultdict(lambda:0)
 for objecter in (v for k, v in out.items() if k.startswith("objecter")):
     for k, v in ((k, v) for k, v in objecter.items() if k.startswith("osdop") or k.startswith("omap_")):
+        op = k.replace("osdop_", "")
+        if op in skip_ops:
+            continue
         if (rm_zero and v > 0) or not rm_zero:
-            result[k.replace("osdop_", "")] += v
+            result[op] += v
 return result
 #+end_src
 
@@ -238,6 +250,9 @@ return result
 #+begin_src bash :noweb yes :results output verbatim
 echo -n "asok/client.admin.$(pgrep -f 'fio --').asok"
 #+end_src
+
+#+RESULTS: fio_asok
+: asok/client.admin..asok
 
 #+caption: Generate a pie plot for table <tab>
 #+name: pie_plot
