@@ -1,14 +1,17 @@
-This is the companion org-mode notebook for the
-[[https://sched.co/1ktW7][Understanding Ceph One Performance Counter at a Time]]
-session at [[https://events.linuxfoundation.org/cephalocon/][Cephalocon]] 2024.
+This is the companion org-mode notebook for the talks
 
-🚧🚧🚧
+- [[https://sched.co/1ktW7][Understanding Ceph One Performance Counter at a Time]] at [[https://events.linuxfoundation.org/cephalocon/][Cephalocon]] 2024
+- [[https://fosdem.org/2025/schedule/event/fosdem-2025-6460-understanding-ceph-a-journey-from-metrics-to-tracing/][Understanding Ceph - A Journey from Metrics  Tracing]] at [[https://fosdem.org/2025/][FOSDEM 2025]]
+
 
 * Notebook
 - as [[./notebook.org][org-mode]] file
 - exported to [[https://irq0.github.io/talk_ceph_perf_counters/notebook.html][html]] with figures
 
-* Perf Counter Browser
+* Understanding Ceph One Performance Counter at a Time
+[[https://github.com/irq0/talk_ceph_perf_counters/blob/main/slides/2024-cephalocon-perf-counters.pdf][PDF]] Slides, [[https://youtu.be/a0qKlLvXncE][Recording on Youtube]]
+
+** Perf Counter Browser
 See [[./perf-counter-browser]] for a web-based performance counter schema
 browser. It needs to connect to a running Ceph cluster to fetch
 performance counter schema from all running daemons. Additional paths
@@ -19,6 +22,14 @@ Counter /groups/ are determined by a heuristic (see: =logger_to_group()=)
 from the /logger/ name. The logger usually gets some number or name
 appended if more than one is exported.
 
-* References
+** References
 - https://docs.ceph.com/en/latest/dev/perf_counters/
 - https://docs.ceph.com/en/latest/dev/perf_histograms/
+
+* Understanding Ceph - A Journey from Metrics to Tracing
+
+🚧🚧🚧
+
+
+** References
+- [[https://github.com/taodd/cephtrace][ceptrace]]
