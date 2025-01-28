@@ -88,3 +88,4 @@ nsecs
 libceph
 uprobe
 reqs
+osdc

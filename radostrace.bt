@@ -1,9 +1,16 @@
-usdt:/compile2/ceph/wip/build/lib/libceph-common.so:"*":"objecter_send_op" {
-   @start[arg0] = nsecs;
-   printf("[%s] th:%s tid:%d osd:%d %d \n", probe, comm, arg0, arg1, arg3)
+BEGIN {
+  printf("%1s %-9s %4s %-32s %s\n", "⇆", "TID", "T(ms)", "OBJ", "OPS");
 }
 
-usdt:/compile2/ceph/wip/build/lib/libceph-common.so:"*":"objecter_finish_op" /@start[arg0]/ {
-   @ns[comm] = hist(nsecs - @start[arg0];
-   delete(@start, arg0);
+
+usdt:/compile2/ceph/wip/build/lib/libceph-common.so:osdc:"objecter_send_op" {
+  printf("%1s %-9d %4s %-32s %s\n", "→", arg0, "", str(arg2), str(arg4));
+  @start[arg0] = nsecs;
+}
+
+usdt:/compile2/ceph/wip/build/lib/libceph-common.so:osdc:"objecter_finish_op" /@start[arg0]/ {
+   $duration_ms = (nsecs - @start[arg0])/1000000;
+   printf("%1s %-9d %4d\n", "←", arg0, $duration_ms);
+   delete(@start[arg0]);
+
 }
