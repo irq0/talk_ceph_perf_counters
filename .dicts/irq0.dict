@@ -89,3 +89,5 @@ libceph
 uprobe
 reqs
 osdc
+objs
+strftime

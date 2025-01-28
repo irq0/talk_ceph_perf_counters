@@ -7,12 +7,6 @@ usdt:*:osd:do_osd_op_pre_call {
   @in_call[tid] = (arg2, arg3);
 }
 
-usdt:*:osd:do_osd_op_pre_writesame,
-usdt:*:osd:do_osd_op_pre_write {
-}
-usdt:*:osd:do_osd_op_pre_writefull {
-}
-
 usdt:*:osd:do_osd_op_post /arg2 == CEPH_OSD_OP_CALL/ {
   @cls[str(@in_call[tid].0)] = hist((nsecs - @start[tid]) / 1000);
   delete(@in_call[tid]);
@@ -21,4 +15,19 @@ usdt:*:osd:do_osd_op_post /arg2 == CEPH_OSD_OP_CALL/ {
 usdt:*:osd:do_osd_op_post /@in_call[tid].0 == 0/ {
   $elapsed = (nsecs - @start[tid]) / 1000;
   @lat_us[str(arg3)] = hist($elapsed);
+  @total_us[str(arg3)] = hist($elapsed);
+}
+
+interval:s:10 {
+  printf("\n%s\n", strftime("%H:%M:%S", nsecs));
+  print(@lat_us);
+  clear(@lat_us);
+}
+
+END {
+  clear(@start);
+  clear(@cls);
+  clear(@lat_us);
+  printf("Total\n");
+  print(@total_us);
 }
