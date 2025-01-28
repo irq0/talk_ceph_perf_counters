@@ -1,0 +1,9 @@
+usdt:/compile2/ceph/wip/build/lib/libceph-common.so:"*":"objecter_send_op" {
+   @start[arg0] = nsecs;
+   printf("[%s] th:%s tid:%d osd:%d %d \n", probe, comm, arg0, arg1, arg3)
+}
+
+usdt:/compile2/ceph/wip/build/lib/libceph-common.so:"*":"objecter_finish_op" /@start[arg0]/ {
+   @ns = hist((nsecs - @start[arg0])/1000);
+   delete(@start[arg0]);
+}
