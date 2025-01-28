@@ -91,3 +91,7 @@ reqs
 osdc
 objs
 strftime
+oids
+figsize
+xlabel
+ylabel

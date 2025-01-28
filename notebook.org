@@ -280,6 +280,29 @@ return fig
 #+RESULTS: pie_plot
 [[file:./example_pie.svg]]
 
+
+#+caption: Generate a histogram plot from bpftrace json
+#+name: bpftrace_hist_plot
+#+begin_src python :var tab="example" :file "./example_hist.svg" :results graphics file value
+import matplotlib.pyplot as plt
+plt.style.use('tableau-colorblind10')
+if tab == "example":
+    labels = ["0..100", "100..1000"]
+    sizes = [23, 42]
+else:
+    labels = [f"{x['min']-x['max']}" for x in tab]
+    sizes = [x["count"] for x in tab]
+
+fig, ax = plt.subplots()
+fig.patch.set_alpha(0)
+ax.bar(labels, sizes)
+ax.patch.set_alpha(0)
+return fig
+#+end_src
+
+#+RESULTS: bpftrace_hist_plot
+[[file:./example_hist.svg]]
+
 ** Benchmark Tools
 
 #+name: run_fio
@@ -1467,6 +1490,61 @@ sudo pkill bpftrace
 #+end_src
 
 #+RESULTS:
+
+
+#+begin_src python :results value table
+import json
+
+result = {}
+for i in range(0, 3):
+    with open(f"s3_bench.osdhotobjs.{i}.json") as fp:
+        for line in fp:
+            try:
+                j = json.loads(line)
+            except json.JSONDecodeError:
+                pass
+            if j["type"] == "map" and "@total" in j["data"]:
+                top_objs = [k for k, v in
+                            reversed(sorted(j["data"]["@total"].items(),
+                                        key=lambda item: item[1]))]
+                result[i] = top_objs[:5]
+return result
+#+end_src
+
+#+RESULTS:
+| 0 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.6 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.8 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.4 gc.14 gc.15)                                                                                            |
+| 1 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.2 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.3 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.0 gc.11 gc.7)                                                                                             |
+| 2 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.9 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.10 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.1 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.7 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.5) |
+
+
+#+caption: Generate a histogram plots for OSD 0 op latencies
+#+begin_src python :var tab="example" :file "./s3_bench_hist.svg" :results graphics file value
+import json
+import matplotlib.pyplot as plt
+
+plt.style.use('tableau-colorblind10')
+with open("s3_bench.osdophist.0.json") as fp:
+    for line in fp:
+        try:
+            j = json.loads(line)
+        except json.JSONDecodeError:
+            pass
+        if j["type"] == "hist" and "@total_us" in j["data"]:
+            fig, ax = plt.subplots(len(j["data"]["@total_us"].items()), figsize=(10, 30))
+            fig.patch.set_alpha(0)
+            for i, (op, vals) in enumerate(j["data"]["@total_us"].items()):
+                ax[i].set_title(op)
+                ax[i].bar([f"{x['min']}\n{x['max']}" for x in vals],
+                          [x["count"] for x in vals])
+                ax[i].patch.set_alpha(0)
+                ax[i].set_xlabel("µs")
+                ax[i].set_ylabel("count")
+            plt.tight_layout()
+            return fig
+#+end_src
+
+#+RESULTS:
+[[file:./s3_bench_hist.svg]]
 
 
 * Misc
