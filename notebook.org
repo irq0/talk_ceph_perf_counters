@@ -21,9 +21,9 @@ Each running a workload and then measuring it's effects.
 /Housekeeping and utility code to run queries and experiments later on/
 
 Start a basic "vstart" cluster
-#+begin_src bash
+#+begin_example bash
 MON=3 OSD=3 MGR=1 RGW=1 MDS=2 NFS=0 ../src/vstart.sh -n
-#+end_src
+#+end_example
 
 #+RESULTS:
 
@@ -53,8 +53,8 @@ ceph osd pool application enable rbd benchmarks
 #+end_src
 
 #+RESULTS:
-: 2025-01-27T21:36:30.821+0100 7ff9266296c0 -1 WARNING: all dangerous and experimental features are enabled.
-: 2025-01-27T21:36:30.845+0100 7ff9266296c0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2025-01-28T14:04:21.022+0100 7f33d4f376c0 -1 WARNING: all dangerous and experimental features are enabled.
+: 2025-01-28T14:04:21.046+0100 7f33d4f376c0 -1 WARNING: all dangerous and experimental features are enabled.
 : pool 'rbd' created
 
 #+caption: Disable RGW background threads
@@ -93,28 +93,28 @@ ceph -s 2>/dev/null
 }
 v19.3.0-6974-gd170809490b
   cluster:
-    id:     7e284701-b88f-4831-976d-60c8e35cd0c3
+    id:     fa0984e3-8c48-4a2b-8683-5135b6017043
     health: HEALTH_OK
             (muted: MGR_MODULE_ERROR)
 
   services:
-    mon: 3 daemons, quorum a,b,c (age 5h)
-    mgr: x(active, since 5h)
+    mon: 3 daemons, quorum a,b,c (age 87s)
+    mgr: x(active, since 83s)
     mds: 1/1 daemons up, 1 standby
-    osd: 3 osds: 3 up (since 5h), 3 in (since 5h)
+    osd: 3 osds: 3 up (since 48s), 3 in (since 66s)
     rgw: 1 daemon active (1 hosts, 1 zones)
 
   data:
     volumes: 1/1 healthy
-    pools:   10 pools, 370 pgs
-    objects: 275 objects, 13 KiB
+    pools:   9 pools, 275 pgs
+    objects: 240 objects, 12 KiB
     usage:   3.0 GiB used, 300 GiB / 303 GiB avail
-    pgs:     0.270% pgs unknown
-             369 active+clean
+    pgs:     0.364% pgs unknown
+             274 active+clean
              1   unknown
 
   io:
-    client:   102 B/s wr, 0 op/s rd, 0 op/s wr
+    client:   5.7 KiB/s rd, 1020 B/s wr, 10 op/s rd, 13 op/s wr
 
 #+end_example
 
@@ -230,6 +230,8 @@ else:
     return None
 if skip_ops:
     skip_ops = set(skip_ops.split(","))
+else:
+    skip_ops = set()
 result=defaultdict(lambda:0)
 for objecter in (v for k, v in out.items() if k.startswith("objecter")):
     for k, v in ((k, v) for k, v in objecter.items() if k.startswith("osdop") or k.startswith("omap_")):
@@ -524,6 +526,19 @@ ceph daemon $out/radosgw.8000.asok perf dump | jq '.[] | with_entries(select((.k
 #+end_src
 
 #+RESULTS:
+#+begin_example
+{
+  "osdop_stat": 5,
+  "osdop_create": 1,
+  "osdop_read": 9,
+  "osdop_writefull": 1,
+  "osdop_setxattr": 9,
+  "osdop_call": 10,
+  "osdop_watch": 80,
+  "osdop_other": 3,
+  "omap_rd": 1
+}
+#+end_example
 
 ** S3 PUT; Collect Perf Counters
 We run an S3 PUT using =s3cmd= and right afterwards collect =perf dump=
@@ -536,7 +551,7 @@ set -x
 <<testfile>>
 <<reset_fns>>
 
-(sudo python3 -u ./radostrace.py $(pgrep radosgw) > "rgw_put_radostrace.log") &
+(sudo python3 -u ./radostrace2.py $(pgrep radosgw) > "rgw_put_radostrace.log") &
 sleep 5
 reset_rgw_perf_counters
 reset_daemon_perf_counters
@@ -553,8 +568,8 @@ wait
 {
     "success": "perf reset all"
 }
-upload: '/tmp/random_4mb' -> 's3://testbucket/30641'  [1 of 1]
-   65536 of 4194304     1% in    0s    15.29 MB/s 4194304 of 4194304   100% in    0s    48.78 MB/s  done
+upload: '/tmp/random_4mb' -> 's3://testbucket/28759'  [1 of 1]
+   65536 of 4194304     1% in    0s    14.22 MB/s 4194304 of 4194304   100% in    0s    43.28 MB/s  done
 {
   "osdop_stat": 2,
   "osdop_create": 1,
@@ -574,7 +589,7 @@ tac $out/radosgw.8000.log | grep -E -m1 'beast:.*PUT /testbucket'
 #+end_src
 
 #+RESULTS:
-: 2025-01-27T23:32:43.876+0100 7f35ae92b6c0  1 beast: 0x7f34def6b200: ::1 - testid [27/Jan/2025:23:32:43.798 +0100] "PUT /testbucket/30641 HTTP/1.1" 200 4194304 - - - latency=0.077001937s
+: 2025-01-28T12:23:01.474+0100 7f35cd9696c0  1 beast: 0x7f34def6b200: ::1 - testid [28/Jan/2025:12:23:01.386 +0100] "PUT /testbucket/28759 HTTP/1.1" 200 4194304 - - - latency=0.088002190s
 
 #+CALL: client_op_table[:results value table](json_file="rgw_put_perf.json", skip_ops="watch")
 
@@ -627,7 +642,7 @@ jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMe
 :   "msgr_recv_messages": 3,
 :   "msgr_send_messages": 3,
 :   "msgr_recv_bytes": 1481,
-:   "msgr_send_bytes": 4197648,
+:   "msgr_send_bytes": 4197645,
 :   "msgr_recv_encrypted_bytes": 0,
 :   "msgr_send_encrypted_bytes": 0
 : }
@@ -653,31 +668,60 @@ echo $overhead
 #+end_src
 
 #+RESULTS: get_sent_overhead
-: 3344
+: 3341
 
 ** Analysis
 
 We saw:
-- A sum of call_get_num_osdop_s3_put() {{{results(=28=)}}} OSD Ops
-- The op counter reported call_get_num_op_s3_put() {{{results(=13=)}}} OSD Ops.
--  call_get_num_send_messages() {{{results(=18=)}}} messages sent by the messenger.
+- A sum of call_get_num_osdop_s3_put() {{{results(=18=)}}} OSD Ops
+- The op counter reported call_get_num_op_s3_put() {{{results(=3=)}}} OSD Ops.
+-  call_get_num_send_messages() {{{results(=3=)}}} messages sent by the messenger.
 
 At first the difference between op counter and sum of ops might be strange, but in RADOS an Operation may consists of many combined Operations. They can even depend on each other to build things like conditional writes (a version assert followed by a write).
 
 We also learn that a PUT is not just a write. There is metadata (setxattr) and data structures (call ops) to update as well.
 
-Our overhead in bytes: call_get_sent_overhead() {{{results(=8282=)}}}.
+Our overhead in bytes: call_get_sent_overhead() {{{results(=3341=)}}}.
 
 ** RADOS Op Trace
-#+begin_src bash :noweb yes :results output table
+#+begin_src bash :noweb yes :results output raw
 grep -E -v "(^tracing|watch ping cookie)" "rgw_put_radostrace.log"
 #+end_src
 
 #+RESULTS:
-| [       424] | .dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.5 | stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=217b                                                                                                                                                                                                                                                                                             |   | 21.00ms |
-| [       425] | 903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_29332  | create → setxattr user.rgw.idtag (62) in=76b → setxattr user.rgw.tail_tag (62) in=79b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (351) in=368b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver |   | 48.55ms |
-| [       426] | .dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.5 | stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=373b                                                                                                                                                                                                                                                                                            |   | 28.56ms |
-| [       437] | queues_list_object                                 | omap-get-keys in=12b                                                                                                                                                                                                                                                                                                                                                            |   | 0.63ms  |
+[     22968]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.7	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=217b
+[     22969]	 903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_28759	create → setxattr user.rgw.idtag (62) in=76b → setxattr user.rgw.tail_tag (62) in=79b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (351) in=368b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver in=44b → setxattr user.rgw.source_zone (4) in=24b → setxattr user.rgw.storage_class (8) in=30b
+[     22970]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.7	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=374b
+[     22863]	                                queues_list_object	omap-get-keys in=12b
+[     22874]	                                script.prerequest.	read 0~0
+[     22875]	                              0555b35654ad1656d804	stat → read 0~0
+[     22876]	                                            testid	call version.read in=11b → read 0~0 → getxattrs
+[     22877]	                                        testbucket	call version.read in=11b → read 0~0
+[     22878]	.bucket.meta.testbucket:903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2	call version.read in=11b → stat → read 0~0 → getxattrs
+[     22879]	                                           pubsub.	getxattrs → stat
+[     22880]	                                   script.putdata.	read 0~0
+[     22881]	               bucket.sync-source-hints.testbucket	call version.read in=11b → read 0~0
+[     22882]	               bucket.sync-target-hints.testbucket	call version.read in=11b → read 0~0
+[     22883]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.10	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=217b
+[     22884]	  903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_4827	create → setxattr user.rgw.idtag (63) in=77b → setxattr user.rgw.tail_tag (63) in=80b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (350) in=367b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver in=44b → setxattr user.rgw.source_zone (4) in=24b → setxattr user.rgw.storage_class (8) in=30b
+[     22885]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.10	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=374b
+[     22886]	                               script.postrequest.	read 0~0
+[     20740]	                                script.prerequest.	read 0~0                                          		      0.59ms
+[     20741]	                              0555b35654ad1656d804	stat → read 0~0                                   		      0.64ms
+[     20742]	                                            testid	call version.read in=11b → read 0~0 → getxattrs   		      0.61ms
+[     20743]	                                        testbucket	call version.read in=11b → read 0~0               		      0.45ms
+[     20744]	.bucket.meta.testbucket:903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2	call version.read in=11b → stat → read 0~0 → getxattrs		      0.63ms
+[     20745]	                                           pubsub.	getxattrs → stat                                  		      0.45ms
+[     20746]	                                   script.putdata.	read 0~0                                          		      0.35ms
+[     20747]	               bucket.sync-source-hints.testbucket	call version.read in=11b → read 0~0               		      0.42ms
+[     20748]	               bucket.sync-target-hints.testbucket	call version.read in=11b → read 0~0               		      0.37ms
+[     20749]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.1	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=218b		     19.48ms
+[     20750]	 903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_23325	create → setxattr user.rgw.idtag (63) in=77b → setxattr user.rgw.tail_tag (63) in=80b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (351) in=368b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver		     46.96ms
+[     20752]	                               script.postrequest.	read 0~0                                          		      0.41ms
+[     20751]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.1	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=374b		     22.67ms
+[      4083]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.6	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_prepare_op in=218b		     23.22ms
+[      4084]	 903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2_30641	create → setxattr user.rgw.idtag (63) in=77b → setxattr user.rgw.tail_tag (63) in=80b → writefull 0~4194304 in=4194304b → setxattr user.rgw.manifest (351) in=368b → setxattr user.rgw.acl (147) in=159b → setxattr user.rgw.content_type (25) in=46b → setxattr user.rgw.etag (32) in=45b → setxattr user.rgw.x-amz-meta-s3cmd-attrs (139) in=170b → call rgw.obj_store_pg_ver		     41.75ms
+[      4085]	.dir.903d2ae0-8d7f-4edc-b65d-e3abe1732c23.4484.2.6	stat → call rgw.guard_bucket_resharding in=36b → call rgw.bucket_complete_op in=374b		     30.67ms
 
 ** Bonus: Messenger Connections
 Question: Where is my RadosGW connected to?
@@ -740,28 +784,28 @@ done
 #+begin_example
 osd.0
 {
-  "msgr_recv_messages": 711,
-  "msgr_send_messages": 713,
-  "msgr_recv_bytes": 4345123,
-  "msgr_send_bytes": 8789456,
+  "msgr_recv_messages": 585,
+  "msgr_send_messages": 587,
+  "msgr_recv_bytes": 4308626,
+  "msgr_send_bytes": 8765176,
   "msgr_recv_encrypted_bytes": 0,
   "msgr_send_encrypted_bytes": 216896
 }
 osd.1
 {
-  "msgr_recv_messages": 671,
-  "msgr_send_messages": 675,
-  "msgr_recv_bytes": 4343967,
-  "msgr_send_bytes": 470602,
+  "msgr_recv_messages": 563,
+  "msgr_send_messages": 563,
+  "msgr_recv_bytes": 4316869,
+  "msgr_send_bytes": 246264,
   "msgr_recv_encrypted_bytes": 0,
-  "msgr_send_encrypted_bytes": 295632
+  "msgr_send_encrypted_bytes": 98544
 }
 osd.2
 {
-  "msgr_recv_messages": 656,
-  "msgr_send_messages": 658,
-  "msgr_recv_bytes": 4351558,
-  "msgr_send_bytes": 373538,
+  "msgr_recv_messages": 551,
+  "msgr_send_messages": 553,
+  "msgr_recv_bytes": 4311859,
+  "msgr_send_bytes": 322086,
   "msgr_recv_encrypted_bytes": 0,
   "msgr_send_encrypted_bytes": 180096
 }
@@ -782,27 +826,27 @@ done
 #+begin_example
 osd.0
 {
-  "op": 16,
+  "op": 13,
   "op_in_bytes": 4194304,
   "op_out_bytes": 0,
-  "subop": 2,
-  "subop_in_bytes": 2064
+  "subop": 0,
+  "subop_in_bytes": 0
 }
 osd.1
+{
+  "op": 4,
+  "op_in_bytes": 0,
+  "op_out_bytes": 0,
+  "subop": 3,
+  "subop_in_bytes": 4198252
+}
+osd.2
 {
   "op": 6,
   "op_in_bytes": 0,
   "op_out_bytes": 0,
   "subop": 3,
-  "subop_in_bytes": 4198251
-}
-osd.2
-{
-  "op": 11,
-  "op_in_bytes": 0,
-  "op_out_bytes": 0,
-  "subop": 1,
-  "subop_in_bytes": 4196187
+  "subop_in_bytes": 4198252
 }
 #+end_example
 
@@ -1071,6 +1115,27 @@ ceph daemon $out/radosgw.8000.asok perf dump | jq '.[] | with_entries(select((.k
 #+end_src
 
 #+RESULTS:
+: {
+:   "osdop_watch": 10
+: }
+
+** Run Tracer
+#+begin_src bash :results output raw :noweb yes
+<<env>>
+<<get_daemons>>
+sudo pkill -f 'rgwophist.bt'
+nohup bash -c 'sudo ~/WORKSPACE/bpftrace/build/src/bpftrace -f json -p $(pgrep radosgw) ./rgwophist.bt > "s3_bench.rgwophist.json" &'
+
+for i in $(seq 0 2); do
+   nohup bash -c "sudo ~/WORKSPACE/bpftrace/build/src/bpftrace -p $(pgrep -f "ceph-osd -i $i") ./osdopsnoop.bt > s3_bench.osdopsnoop.$i.json &"
+   nohup bash -c "sudo ~/WORKSPACE/bpftrace/build/src/bpftrace -p $(pgrep -f "ceph-osd -i $i") ./osdomapsnoop.bt > s3_bench.osdomapsnoop.$i.json &"
+   nohup bash -c "sudo ~/WORKSPACE/bpftrace/build/src/bpftrace -f json -p $(pgrep -f "ceph-osd -i $i") ./osdhotobjs.bt > s3_bench.osdhotobjs.$i.json &"
+   nohup bash -c "sudo ~/WORKSPACE/bpftrace/build/src/bpftrace -f json -p $(pgrep -f "ceph-osd -i $i") ./osdophist.bt > s3_bench.osdophist.$i.json &"
+done
+#+end_src
+
+#+RESULTS:
+
 
 ** S3 Benchmark: =warp= mixed
 We run =warp=, collect the results and fetch the perf counters from RGW.
@@ -1089,14 +1154,14 @@ grep -E "(Operation|Cluster Total|Throughput)" "warp_${run_id}.log"
 
 #+RESULTS:
 : Operation: DELETE, 10%, Concurrency: 20, Ran 59s.
-:  * Throughput: 21.97 obj/s
+:  * Throughput: 21.36 obj/s
 : Operation: GET, 45%, Concurrency: 20, Ran 59s.
-:  * Throughput: 981.65 MiB/s, 98.17 obj/s
+:  * Throughput: 963.04 MiB/s, 96.30 obj/s
 : Operation: PUT, 15%, Concurrency: 20, Ran 59s.
-:  * Throughput: 326.52 MiB/s, 32.65 obj/s
+:  * Throughput: 320.82 MiB/s, 32.08 obj/s
 : Operation: STAT, 30%, Concurrency: 20, Ran 59s.
-:  * Throughput: 65.70 obj/s
-: Cluster Total: 1307.39 MiB/s, 218.31 obj/s over 59s.
+:  * Throughput: 64.27 obj/s
+: Cluster Total: 1282.56 MiB/s, 213.67 obj/s over 59s.
 
 #+caption: collect osd metrics
 #+begin_src bash :var perf=rgw_s3_bench_perf :results output verbatim :noweb yes
@@ -1112,21 +1177,22 @@ done
 #+RESULTS:
 
 
+
 ** Client Operations
 #+CALL: client_op_table[:results value table](json_file=rgw_s3_bench_perf)
 
 #+name: rgw_s3_bench_osdops
 #+RESULTS:
-| stat      | 20409 |
-| create    |  2111 |
-| read      | 17797 |
-| writefull |  6333 |
-| setxattr  | 16888 |
-| cmpxattr  |  2111 |
-| call      | 37615 |
-| watch     |   150 |
-| other     | 16187 |
-| omap_rd   |     2 |
+| stat      | 19985 |
+| create    |  2072 |
+| read      | 17348 |
+| writefull |  6216 |
+| setxattr  | 16576 |
+| cmpxattr  |  2072 |
+| call      | 37377 |
+| watch     |   200 |
+| other     | 15841 |
+| omap_rd   |     3 |
 
 #+CALL: pie_plot[:file "./rgw_warp_osdops.svg"](tab=rgw_s3_bench_osdops)
 
@@ -1144,12 +1210,12 @@ jq 'reduce ((."AsyncMessenger::Worker-0", ."AsyncMessenger::Worker-1", ."AsyncMe
 
 #+RESULTS:
 : {
-:   "msgr_recv_messages": 43295,
-:   "msgr_send_messages": 43355,
-:   "msgr_recv_bytes": 62041669362,
-:   "msgr_send_bytes": 22053219662,
-:   "msgr_recv_encrypted_bytes": 0,
-:   "msgr_send_encrypted_bytes": 11504
+:   "msgr_recv_messages": 42917,
+:   "msgr_send_messages": 42997,
+:   "msgr_recv_bytes": 60520752196,
+:   "msgr_send_bytes": 21681520039,
+:   "msgr_recv_encrypted_bytes": 144,
+:   "msgr_send_encrypted_bytes": 101232
 : }
 
 #+caption: Get op latency counter from objecter
@@ -1159,8 +1225,8 @@ jq -r 'to_entries | map(select(.key | test("^objecter"))) | .[] | [.key, .value.
 
 #+RESULTS:
 | objecter            |         0.0 |
-| objecter-0x2639a340 |         0.0 |
-| objecter-0x2639add0 | 0.043418261 |
+| objecter-0x1c12e340 |         0.0 |
+| objecter-0x1c12edd0 | 0.044970593 |
 
 ** OSD
 #+caption: Get OSD latency counters
@@ -1178,9 +1244,9 @@ done
 
 #+RESULTS:
 | target |  op_latency | op_r_latency | op_w_latency | op_rw_latency |
-| osd.0  | 0.041201573 |  0.005672571 |  0.099334064 |   0.083447218 |
-| osd.1  | 0.044812809 |  0.005676555 |  0.098463874 |   0.082343773 |
-| osd.2  | 0.039115449 |  0.005419339 |  0.098269827 |   0.082073632 |
+| osd.0  | 0.040857734 |  0.005501362 |   0.10378922 |   0.083900036 |
+| osd.1  | 0.043573764 |  0.006019578 |   0.10526904 |    0.08492132 |
+| osd.2  | 0.044504744 |  0.005454889 |  0.103320462 |   0.084343006 |
 
 ** OSD Latency Histograms
 #+caption: Get OSD op histograms
@@ -1229,18 +1295,18 @@ paste <(jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hi
 | bucket        | rw in | rw out | read out | write in |
 | <0            |     0 |      0 |        0 |        0 |
 | 0ns…99µs      |     0 |      0 |        0 |        0 |
-| 100µs…199µs   |     0 |      0 |       20 |        0 |
-| 200µs…399µs   |     0 |      0 |     1817 |        0 |
-| 400µs…799µs   |     0 |      0 |     1220 |        0 |
-| 800µs…1ms     |     0 |      0 |      248 |        0 |
-| 1ms…3ms       |     0 |      0 |      719 |        0 |
-| 3ms…6ms       |     0 |      0 |     1732 |        0 |
-| 6ms…12ms      |     0 |      0 |     1373 |        0 |
-| 12ms…25ms     |     0 |      0 |      630 |        0 |
-| 25ms…51ms     |   679 |    679 |      176 |        6 |
-| 51ms…102ms    |  2225 |   2225 |       44 |     1302 |
-| 102ms…204ms   |   849 |    849 |       12 |      817 |
-| 204ms…409ms   |    31 |     31 |        0 |        9 |
+| 100µs…199µs   |     0 |      0 |        1 |        0 |
+| 200µs…399µs   |     0 |      0 |     1348 |        0 |
+| 400µs…799µs   |     0 |      0 |     1716 |        0 |
+| 800µs…1ms     |     0 |      0 |      278 |        0 |
+| 1ms…3ms       |     0 |      0 |      623 |        0 |
+| 3ms…6ms       |     0 |      0 |     1819 |        0 |
+| 6ms…12ms      |     0 |      0 |     1584 |        0 |
+| 12ms…25ms     |     0 |      0 |      696 |        0 |
+| 25ms…51ms     |   682 |    682 |      158 |        3 |
+| 51ms…102ms    |  2169 |   2169 |       26 |     1124 |
+| 102ms…204ms   |   871 |    871 |        4 |      942 |
+| 204ms…409ms   |    22 |     22 |        0 |        7 |
 | 409ms…819ms   |     0 |      0 |        0 |        0 |
 | 819ms…1s      |     0 |      0 |        0 |        0 |
 | 1s…3s         |     0 |      0 |        0 |        0 |
@@ -1275,7 +1341,7 @@ jq -r ".osd.op_w_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" 
 #+end_src
 
 #+RESULTS:
-| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| ⬔           | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
 | <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1286,10 +1352,10 @@ jq -r ".osd.op_w_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json" 
 | 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 25ms…51ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     4 |      0 |       0 |    0 |
-| 51ms…102ms  |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   461 |   841 |      0 |       0 |    0 |
-| 102ms…204ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   268 |   549 |      0 |       0 |    0 |
-| 204ms…409ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     1 |     8 |      0 |       0 |    0 |
+| 25ms…51ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     1 |      0 |       0 |    0 |
+| 51ms…102ms  |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   404 |   720 |      0 |       0 |    0 |
+| 102ms…204ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   263 |   679 |      0 |       0 |    0 |
+| 204ms…409ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     7 |      0 |       0 |    0 |
 | 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1307,20 +1373,20 @@ jq -r ".osd.op_r_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 #+end_src
 
 #+RESULTS:
-| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| ⬔           | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
 | <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 100µs…199µs |     0 |       20 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 200µs…399µs |    31 |     1421 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   333 |    32 |      0 |       0 |    0 |
-| 400µs…799µs |    45 |      413 |     9 |     1 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   185 |   567 |      0 |       0 |    0 |
-| 800µs…1ms   |    17 |       39 |    26 |     3 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    59 |   104 |      0 |       0 |    0 |
-| 1ms…3ms     |     3 |       21 |     5 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   382 |   308 |      0 |       0 |    0 |
-| 3ms…6ms     |     1 |       33 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   530 |  1168 |      0 |       0 |    0 |
-| 6ms…12ms    |     2 |       38 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   313 |  1020 |      0 |       0 |    0 |
-| 12ms…25ms   |     3 |       26 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   135 |   466 |      0 |       0 |    0 |
-| 25ms…51ms   |     0 |       21 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    35 |   120 |      0 |       0 |    0 |
-| 51ms…102ms  |     0 |        8 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    10 |    26 |      0 |       0 |    0 |
-| 102ms…204ms |     0 |        3 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     7 |      0 |       0 |    0 |
+| 100µs…199µs |     1 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 200µs…399µs |   126 |     1025 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   184 |    13 |      0 |       0 |    0 |
+| 400µs…799µs |   223 |      806 |    34 |     2 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   202 |   449 |      0 |       0 |    0 |
+| 800µs…1ms   |     5 |       72 |     0 |     1 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    64 |   136 |      0 |       0 |    0 |
+| 1ms…3ms     |     3 |       29 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   329 |   262 |      0 |       0 |    0 |
+| 3ms…6ms     |     2 |       39 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   529 |  1249 |      0 |       0 |    0 |
+| 6ms…12ms    |     1 |       44 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   340 |  1199 |      0 |       0 |    0 |
+| 12ms…25ms   |     2 |       23 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |   157 |   514 |      0 |       0 |    0 |
+| 25ms…51ms   |     1 |        7 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |    27 |   123 |      0 |       0 |    0 |
+| 51ms…102ms  |     0 |        5 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     6 |    15 |      0 |       0 |    0 |
+| 102ms…204ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     2 |     2 |      0 |       0 |    0 |
 | 204ms…409ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1339,7 +1405,7 @@ jq -r ".osd.op_rw_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json
 #+end_src
 
 #+RESULTS:
-| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| ⬔           | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
 | <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1350,10 +1416,10 @@ jq -r ".osd.op_rw_latency_out_bytes_histogram" < "warp_${run_id}_osd.0_hist.json
 | 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 25ms…51ms   |   679 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 51ms…102ms  |  2225 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 102ms…204ms |   849 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 204ms…409ms |    31 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 25ms…51ms   |   682 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 51ms…102ms  |  2169 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 102ms…204ms |   871 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 204ms…409ms |    22 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1371,7 +1437,7 @@ jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 #+end_src
 
 #+RESULTS:
-| ⬔          | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
+| ⬔           | 0…511 | 512…1023 | 1K…2K | 2K…4K | 4K…8K | 8K…16K | 16K…32K | 32K…64K | 64K…128K | 128K…256K | 256K…512K | 512K…1024K | 1M…2M | 2M…4M | 4M…8M | 8M…16M | 16M…32M | >32M |
 | <0          |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 0ns…99µs    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 100µs…199µs |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1382,10 +1448,10 @@ jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 | 3ms…6ms     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 6ms…12ms    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 12ms…25ms   |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 25ms…51ms   |   495 |      184 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 51ms…102ms  |  1820 |      405 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 102ms…204ms |   780 |       69 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
-| 204ms…409ms |    31 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 25ms…51ms   |   476 |      206 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 51ms…102ms  |  1770 |      399 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 102ms…204ms |   796 |       75 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+| 204ms…409ms |    22 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 409ms…819ms |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 819ms…1s    |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 1s…3s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
@@ -1394,6 +1460,14 @@ jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 | 13s…26s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | 26s…52s     |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 | >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
+
+
+** RGW Op Trace
+#+begin_src bash :results output raw
+sudo pkill bpftrace
+#+end_src
+
+#+RESULTS:
 
 
 * Misc

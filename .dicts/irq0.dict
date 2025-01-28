@@ -72,3 +72,15 @@ opmix
 radostrace
 idtag
 resharding
+pkill
+nohup
+osdophist
+osdhotobjs
+osdomapsnoop
+osdopsnoop
+bpftrace
+rgwophist
+putdata
+postrequest
+prerequest
+getxattrs
