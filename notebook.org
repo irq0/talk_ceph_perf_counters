@@ -1484,7 +1484,7 @@ jq -r ".osd.op_rw_latency_in_bytes_histogram" < "warp_${run_id}_osd.0_hist.json"
 | >104s       |     0 |        0 |     0 |     0 |     0 |      0 |       0 |       0 |        0 |         0 |         0 |          0 |     0 |     0 |     0 |      0 |       0 |    0 |
 
 
-** RGW Op Trace
+** Tracing Results
 #+begin_src bash :results output raw
 sudo pkill bpftrace
 #+end_src
@@ -1515,6 +1515,51 @@ return result
 | 0 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.6 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.8 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.4 gc.14 gc.15)                                                                                            |
 | 1 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.2 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.3 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.0 gc.11 gc.7)                                                                                             |
 | 2 | (.dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.9 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.10 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.1 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.7 .dir.59ff0c8a-3962-4081-932e-dcaa497a565f.4482.5.5) |
+
+#+caption: Generate tables for OSD 0 op latencies
+#+begin_src python :results output raw
+import json
+from collections import defaultdict
+result = []
+buckets = [2**x for x in range(16)]
+result.append(["OP↓", "Bucket →"] + [" " for _ in range(len(buckets) - 2)])
+result.append([" "] + [f" <{b} " for b in buckets])
+with open("s3_bench.osdophist.0.json") as fp:
+    for line in fp:
+        try:
+            j = json.loads(line)
+        except json.JSONDecodeError:
+            pass
+        if j["type"] == "hist" and "@total_us" in j["data"]:
+            # buckets ->
+            # op
+            # |
+            # v
+            for i, (op, vals) in enumerate(j["data"]["@total_us"].items()):
+                vals_by_upper = {v["max"]+1:v["count"]  for v in vals}
+                row = [op,]
+                row.extend((vals_by_upper.get(b, 0) for b in buckets))
+                result.append(row)
+            break
+
+for row in result:
+    print("|", "|".join(map(str, row)), "|")
+#+end_src
+
+#+RESULTS:
+| OP↓            | Bucket → |    |      |      |      |      |      |      |      |      |       |       |       |       |        |        |
+|                |       <1 | <2 |   <4 |   <8 |  <16 |  <32 |  <64 | <128 | <256 | <512 | <1024 | <2048 | <4096 | <8192 | <16384 | <32768 |
+| watch          |        0 |  0 |    0 |    0 |    5 |   35 |   31 |    7 |    2 |    0 |     0 |     0 |     0 |     0 |      0 |      0 |
+| cmpxattr       |        0 |  0 |    0 |    0 |   49 |  493 |  213 |   31 |    2 |    0 |     0 |     0 |     0 |     0 |      0 |      0 |
+| create         |        0 |  0 |    0 |    0 |  217 |  429 |  128 |   13 |    1 |    0 |     0 |     0 |     0 |     0 |      0 |      0 |
+| set-alloc-hint |        0 |  0 |    0 |    0 |  169 |  958 |  448 |   65 |   10 |    2 |     2 |     1 |     0 |     0 |      0 |      0 |
+| writefull      |        0 |  0 |    0 |    0 |  140 | 1088 |  387 |   34 |  258 |  272 |   164 |    86 |    13 |     1 |      0 |      0 |
+| getxattrs      |        0 |  0 |    0 |    0 |    0 |    1 | 2387 | 1699 |   70 |    1 |     0 |     0 |     0 |     0 |      0 |      0 |
+| setxattr       |        0 |  0 |    0 | 3863 | 2017 |  364 |   52 |    6 |    0 |    1 |     1 |     0 |     0 |     0 |      0 |      0 |
+| read           |        0 |  0 |    0 |    0 |    0 |    0 |    0 |   15 |  680 |  533 |    57 |   300 |  1365 |  2547 |    977 |    190 |
+| stat           |        0 |  0 | 1819 | 2235 | 1719 |  856 |  165 |   18 |    4 |    2 |     0 |     0 |     0 |     0 |      0 |      0 |
+| call           |        0 |  0 |    0 |    0 |    0 |   41 | 3111 | 4042 | 3463 |  945 |   118 |    51 |    75 |    95 |    166 |    287 |
+
 
 
 #+caption: Generate a histogram plots for OSD 0 op latencies
