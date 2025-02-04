@@ -28,8 +28,8 @@ appended if more than one is exported.
 
 * Understanding Ceph - A Journey from Metrics to Tracing
 
-🚧🚧🚧
-
+[[slides/2025-fosdem-understanding_ceph-perf+tracing.pdf][PDF Slides]], [[https://video.fosdem.org/2025/k3401/][Recordings]]
 
 ** References
-- [[https://github.com/taodd/cephtrace][ceptrace]]
+- [[https://github.com/taodd/cephtrace][cephtrace]]
+- [[https://github.com/clyso/ceph-ebpf-toolkit][Clyso Ceph eBPF Tracing Toolkit]]
